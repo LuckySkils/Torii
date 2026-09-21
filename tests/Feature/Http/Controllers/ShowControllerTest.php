@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Enums\DispatchStatus;
 use App\Enums\ImageStatus;
+use App\Enums\PremiereSource;
+use App\Enums\Season;
 use App\Enums\TrackingMode;
 use App\Models\Release;
 use App\Models\Show;
@@ -56,7 +58,8 @@ test('index lists shows with their latest release and respects filters and sort'
             ->has('shows.data', 1)
             ->where('shows.data.0.id', $tracked->id)
             ->where('shows.data.0.firstSeenAt', $tracked->first_seen_at->toIso8601String())
-            ->where('shows.data.0.latestRelease.title', '[SubsPlease] Grand Blue S3 - 12v2 (1080p) [BBBB2222].mkv')
+            ->where('shows.data.0.latest.episode', '12')
+            ->where('shows.data.0.latest.isBatch', false)
             ->where('filters.tracked', 'yes');
     });
 
@@ -146,13 +149,55 @@ test('index exposes image status and a versioned image URL once an image is stor
 
     $this->get('/shows?sort=last_seen')->assertInertia(function ($page) use ($withImage) {
         $page->where('shows.data.0.imageStatus', 'found')
-            ->where('shows.data.0.imageUrl', "/shows/{$withImage->id}/image?v=".substr(hash('sha256', 'fake-bytes'), 0, 8));
+            ->where('shows.data.0.imageUrl', "/shows/{$withImage->id}/image?v=".substr(hash('sha256', 'fake-bytes'), 0, 8))
+            ->where('shows.data.0.imageWidth', 10)
+            ->where('shows.data.0.imageHeight', 10);
     });
 
     $this->get('/shows?q=One')->assertInertia(fn ($page) => $page->where('shows.data.0.imageStatus', 'none')
-        ->where('shows.data.0.imageUrl', null));
+        ->where('shows.data.0.imageUrl', null)
+        ->where('shows.data.0.imageWidth', null)
+        ->where('shows.data.0.imageHeight', null));
 
     expect($withoutImage)->not->toBeNull();
+});
+
+test('index filters by season and year, sorts by premiered date newest-first with nulls last, and lists distinct years', function () {
+    $spring2026 = makeIndexableShow('Spring Show', false, '2026-09-20 00:00:00');
+    $spring2026->update([
+        'premiered_at' => '2026-04-01 00:00:00',
+        'premiere_source' => PremiereSource::Episode1,
+        'season' => Season::Spring,
+        'season_year' => 2026,
+    ]);
+
+    $winter2025 = makeIndexableShow('Winter Show', false, '2026-09-20 00:00:00');
+    $winter2025->update([
+        'premiered_at' => '2025-02-01 00:00:00',
+        'premiere_source' => PremiereSource::Episode1,
+        'season' => Season::Winter,
+        'season_year' => 2025,
+    ]);
+
+    $noPremiere = makeIndexableShow('No Premiere Show', false, '2026-09-20 00:00:00');
+
+    $this->get('/shows?season=spring')->assertInertia(fn ($page) => $page->has('shows.data', 1)
+        ->where('shows.data.0.name', 'Spring Show')
+        ->where('shows.data.0.season', 'spring')
+        ->where('shows.data.0.seasonYear', 2026)
+        ->where('shows.data.0.premiereSource', 'episode1')
+        ->where('shows.data.0.premieredAt', $spring2026->premiered_at->toIso8601String()));
+
+    $this->get('/shows?year=2025')->assertInertia(fn ($page) => $page->has('shows.data', 1)
+        ->where('shows.data.0.name', 'Winter Show'));
+
+    $this->get('/shows?sort=premiered')->assertInertia(fn ($page) => $page->where('shows.data.0.name', 'Spring Show')
+        ->where('shows.data.1.name', 'Winter Show')
+        ->where('shows.data.2.name', 'No Premiere Show'));
+
+    $this->get('/shows')->assertInertia(fn ($page) => $page->where('filterOptions.years', [2026, 2025]));
+
+    expect($noPremiere)->not->toBeNull();
 });
 
 test('show renders the show and all of its releases newest first', function () {

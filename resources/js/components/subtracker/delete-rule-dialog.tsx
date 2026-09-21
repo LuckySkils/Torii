@@ -17,11 +17,18 @@ import { toast } from 'sonner';
 interface DeleteRuleDialogProps {
     showId: number;
     showName: string;
-    trigger: React.ReactNode;
+    /** Self-managed mode: renders this as the AlertDialogTrigger. Omit it and pass open/onOpenChange for controlled mode instead. */
+    trigger?: React.ReactNode;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
 }
 
-export function DeleteRuleDialog({ showId, showName, trigger }: DeleteRuleDialogProps) {
+export function DeleteRuleDialog({ showId, showName, trigger, open, onOpenChange }: DeleteRuleDialogProps) {
     const [pending, setPending] = useState(false);
+    const [internalOpen, setInternalOpen] = useState(false);
+    const isControlled = open !== undefined;
+    const resolvedOpen = isControlled ? open : internalOpen;
+    const setOpen = isControlled ? (onOpenChange ?? (() => {})) : setInternalOpen;
 
     function handleConfirm() {
         setPending(true);
@@ -34,8 +41,8 @@ export function DeleteRuleDialog({ showId, showName, trigger }: DeleteRuleDialog
     }
 
     return (
-        <AlertDialog>
-            <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>
+        <AlertDialog open={resolvedOpen} onOpenChange={setOpen}>
+            {trigger && <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>}
             <AlertDialogContent>
                 <AlertDialogHeader>
                     <AlertDialogTitle>Delete rule for "{showName}"?</AlertDialogTitle>

@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Services\Feed;
 
+use App\Enums\PremiereSource;
 use App\Events\NewReleaseDetected;
 use App\Events\ShowDiscovered;
 use App\Models\Release;
 use App\Models\Show;
+use App\Services\Premiere\PremiereCalculator;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
 use SimpleXMLElement;
@@ -18,6 +20,7 @@ final class FeedIngestor
 
     public function __construct(
         private readonly SubsPleaseTitleParser $parser = new SubsPleaseTitleParser,
+        private readonly PremiereCalculator $premiereCalculator = new PremiereCalculator,
     ) {}
 
     public function ingest(string $xmlBody): IngestResult
@@ -41,6 +44,7 @@ final class FeedIngestor
             $category = isset($item->category) ? (string) $item->category : null;
             $parsed = $this->parser->parse($title, $category);
 
+            $show = null;
             $showId = null;
 
             if ($parsed->name !== null) {
@@ -58,6 +62,10 @@ final class FeedIngestor
 
             if ($wasNewRelease) {
                 $itemsNew++;
+
+                if ($show !== null) {
+                    $this->maybeRecomputePremiere($show);
+                }
             }
         }
 
@@ -140,10 +148,21 @@ final class FeedIngestor
         return false;
     }
 
+    private function maybeRecomputePremiere(Show $show): void
+    {
+        // Once SubsPlease's own data has set the premiere, nothing ingest sees
+        // (episode 1 or "earliest seen") can ever outrank it.
+        if ($show->premiere_source === PremiereSource::SubsPlease) {
+            return;
+        }
+
+        $this->premiereCalculator->apply($show, $this->premiereCalculator->fromEpisode1OrEarliest($show));
+    }
+
     private function extractInfohash(string $link): ?string
     {
         if (preg_match('/xt=urn:btih:([0-9A-Za-z]+)/', $link, $matches) === 1) {
-            return strtoupper($matches[1]);
+            return Infohash::normalize($matches[1]);
         }
 
         return null;

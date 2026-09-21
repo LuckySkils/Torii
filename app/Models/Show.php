@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\ImageStatus;
+use App\Enums\PremiereSource;
 use App\Enums\RuleState;
+use App\Enums\Season;
 use App\Enums\TrackingMode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -30,6 +32,10 @@ class Show extends Model
         'image_status',
         'image_checked_at',
         'image_error',
+        'premiered_at',
+        'premiere_source',
+        'season',
+        'season_year',
     ];
 
     protected function casts(): array
@@ -44,6 +50,10 @@ class Show extends Model
             'rule_synced_at' => 'datetime',
             'image_status' => ImageStatus::class,
             'image_checked_at' => 'datetime',
+            'premiered_at' => 'datetime',
+            'premiere_source' => PremiereSource::class,
+            'season' => Season::class,
+            'season_year' => 'integer',
         ];
     }
 

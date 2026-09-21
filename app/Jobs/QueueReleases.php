@@ -6,6 +6,7 @@ namespace App\Jobs;
 
 use App\Enums\DispatchStatus;
 use App\Models\Release;
+use App\Services\Feed\Infohash;
 use App\Services\QBittorrent\QBittorrentClient;
 use App\Services\QBittorrent\QBittorrentException;
 use Illuminate\Bus\Queueable;
@@ -89,7 +90,10 @@ final class QueueReleases implements ShouldBeUnique, ShouldQueue
         $existingHashes = [];
 
         foreach ($withHash->chunk(50) as $chunk) {
-            $hashes = $chunk->pluck('infohash')->map(fn (string $hash) => strtolower($hash))->all();
+            $hashes = $chunk->map(fn (Release $release) => Infohash::normalize($release->infohash))
+                ->filter()
+                ->values()
+                ->all();
 
             if ($hashes === []) {
                 continue;
@@ -126,12 +130,39 @@ final class QueueReleases implements ShouldBeUnique, ShouldQueue
                 'dispatch_error' => null,
             ]);
         } catch (QBittorrentException $e) {
-            $release->update([
-                'dispatch_status' => DispatchStatus::Error,
-                'dispatch_error' => $e->getMessage(),
-            ]);
+            // qBit can answer `Fails.` for a torrent it already has despite the
+            // pre-check above; before giving up, confirm one more time.
+            if ($this->torrentAlreadyExists($client, $release)) {
+                $release->update([
+                    'dispatch_status' => DispatchStatus::Exists,
+                    'dispatched_at' => now(),
+                    'dispatch_error' => null,
+                ]);
+            } else {
+                $release->update([
+                    'dispatch_status' => DispatchStatus::Error,
+                    'dispatch_error' => $e->getMessage(),
+                ]);
+            }
         } finally {
             $lock->release();
         }
+    }
+
+    private function torrentAlreadyExists(QBittorrentClient $client, Release $release): bool
+    {
+        $hash = Infohash::normalize($release->infohash);
+
+        if ($hash === null) {
+            return false;
+        }
+
+        foreach ($client->getTorrentsInfo([$hash]) as $torrent) {
+            if (isset($torrent['hash']) && strtolower($torrent['hash']) === $hash) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

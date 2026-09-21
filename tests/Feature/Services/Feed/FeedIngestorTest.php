@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\PremiereSource;
 use App\Events\NewReleaseDetected;
 use App\Events\ShowDiscovered;
 use App\Models\Release;
@@ -85,7 +86,7 @@ test('extracts the infohash from the magnet link', function () {
 
     $release = Release::where('guid', 'GUID-1')->first();
 
-    expect($release->infohash)->toBe('DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF')
+    expect($release->infohash)->toBe('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef')
         ->and($release->size_label)->toBe('1.34 GiB');
 });
 
@@ -151,6 +152,59 @@ test('does not dispatch ShowDiscovered again for an already-known show', functio
     (new FeedIngestor)->ingest($second);
 
     Event::assertNotDispatched(ShowDiscovered::class);
+});
+
+test('sets earliest_seen premiere data as soon as a new show gets its first release', function () {
+    $xml = sampleFeedXml([
+        sampleItem('[SubsPlease] Test Show - 05 (1080p) [ABCD1234].mkv', 'GUID-1', 'Test Show - 1080', pubDate: 'Mon, 21 Sep 2026 08:32:00 +0000'),
+    ]);
+
+    (new FeedIngestor)->ingest($xml);
+
+    $show = Show::where('name', 'Test Show')->first();
+
+    expect($show->premiere_source)->toBe(PremiereSource::EarliestSeen)
+        ->and($show->premiered_at->toIso8601String())->toBe('2026-09-21T08:32:00+00:00')
+        ->and($show->season)->not->toBeNull()
+        ->and($show->season_year)->not->toBeNull();
+});
+
+test('upgrades premiere data to episode1 once an episode 01 release arrives', function () {
+    $first = sampleFeedXml([
+        sampleItem('[SubsPlease] Test Show - 05 (1080p) [ABCD1234].mkv', 'GUID-1', 'Test Show - 1080', pubDate: 'Mon, 21 Sep 2026 08:32:00 +0000'),
+    ]);
+    $second = sampleFeedXml([
+        sampleItem('[SubsPlease] Test Show - 01 (1080p) [EF012345].mkv', 'GUID-2', 'Test Show - 1080', pubDate: 'Mon, 01 Jun 2026 00:00:00 +0000'),
+    ]);
+
+    (new FeedIngestor)->ingest($first);
+    (new FeedIngestor)->ingest($second);
+
+    $show = Show::where('name', 'Test Show')->first();
+
+    expect($show->premiere_source)->toBe(PremiereSource::Episode1)
+        ->and($show->premiered_at->toIso8601String())->toBe('2026-06-01T00:00:00+00:00');
+});
+
+test('never overwrites an already subsplease-sourced premiere via ingest', function () {
+    $xml = sampleFeedXml([
+        sampleItem('[SubsPlease] Test Show - 05 (1080p) [ABCD1234].mkv', 'GUID-1', 'Test Show - 1080'),
+    ]);
+
+    (new FeedIngestor)->ingest($xml);
+
+    $show = Show::where('name', 'Test Show')->first();
+    $show->update(['premiere_source' => PremiereSource::SubsPlease, 'premiered_at' => '2020-01-01']);
+
+    $secondXml = sampleFeedXml([
+        sampleItem('[SubsPlease] Test Show - 01 (1080p) [EF012345].mkv', 'GUID-2', 'Test Show - 1080', pubDate: 'Mon, 01 Jun 2026 00:00:00 +0000'),
+    ]);
+    (new FeedIngestor)->ingest($secondXml);
+
+    $show->refresh();
+
+    expect($show->premiere_source)->toBe(PremiereSource::SubsPlease)
+        ->and($show->premiered_at->toDateString())->toBe('2020-01-01');
 });
 
 test('marks batch releases with is_batch true and a null episode', function () {

@@ -10,6 +10,10 @@ export type DispatchStatus = 'sent' | 'exists' | 'error';
 
 export type ImageStatus = 'none' | 'pending' | 'found' | 'missing' | 'error';
 
+export type Season = 'winter' | 'spring' | 'summer' | 'autumn';
+
+export type PremiereSource = 'subsplease' | 'episode1' | 'earliest_seen';
+
 export interface QbitHealth {
     reachable: boolean;
     version: string | null;
@@ -64,25 +68,31 @@ export interface DashboardProps {
     latestReleases: ReleaseSummary[];
 }
 
-export interface ShowLatestRelease {
-    title: string;
+export interface LatestRelease {
+    episode: string | null;
+    isBatch: boolean;
+    batchFrom: number | null;
+    batchTo: number | null;
     publishedAt: string;
-    link: string;
 }
 
-/** Mirrors ShowResource exactly (CLAUDE.md §8) — one row of `shows`, or the `show` prop on Shows/Show. */
+/** Mirrors ShowResource exactly (agents/CLAUDE.md §9) — one row of `shows`, or the `show` prop on Shows/Show. */
 export interface ShowSummary {
     id: number;
     name: string;
-    latestEpisode: string | null;
     firstSeenAt: string;
     lastSeenAt: string;
     isTracked: boolean;
     trackingMode: TrackingMode | null;
     ruleState: RuleState;
     ruleError: string | null;
-    /** Only present when the controller eager-loaded the relation (true on Shows/Index, absent on Shows/Show). */
-    latestRelease?: ShowLatestRelease | null;
+    /**
+     * Built from `whenLoaded('latestRelease', ...)`: present (possibly null) on
+     * Shows/Index (eager-loaded there), entirely absent — `undefined` — on
+     * Shows/Show, which doesn't eager-load the relation. That page derives the
+     * latest release from `releases[0]` (already sorted newest-first) instead.
+     */
+    latest?: LatestRelease | null;
     hasBatch: boolean;
     queuedCount: number;
     downloadableCount: number;
@@ -90,6 +100,12 @@ export interface ShowSummary {
     imageStatus: ImageStatus;
     imageCheckedAt: string | null;
     imageError: string | null;
+    imageWidth: number | null;
+    imageHeight: number | null;
+    season: Season | null;
+    seasonYear: number | null;
+    premieredAt: string | null;
+    premiereSource: PremiereSource | null;
 }
 
 export interface PaginationLinkItem {
@@ -123,12 +139,19 @@ export interface PaginatedShows {
 export interface ShowFilters {
     q: string;
     tracked: 'all' | 'yes' | 'no';
-    sort: 'name' | 'last_seen';
+    sort: 'name' | 'last_seen' | 'premiered';
+    season: Season | null;
+    year: number | null;
+}
+
+export interface FilterOptions {
+    years: number[];
 }
 
 export interface ShowsIndexProps {
     shows: PaginatedShows;
     filters: ShowFilters;
+    filterOptions: FilterOptions;
 }
 
 export interface ShowShowProps {

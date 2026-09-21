@@ -5,16 +5,28 @@ import { useState } from 'react';
 interface MatchesDialogProps {
     showId: number;
     showName: string;
-    trigger: React.ReactNode;
+    /** Self-managed mode: renders this as the DialogTrigger. Omit it and pass open/onOpenChange for controlled mode instead. */
+    trigger?: React.ReactNode;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
 }
 
 type LoadState = { status: 'idle' } | { status: 'loading' } | { status: 'error'; message: string } | { status: 'loaded'; data: MatchingArticles };
 
-export function MatchesDialog({ showId, showName, trigger }: MatchesDialogProps) {
+export function MatchesDialog({ showId, showName, trigger, open, onOpenChange }: MatchesDialogProps) {
     const [state, setState] = useState<LoadState>({ status: 'idle' });
+    const [internalOpen, setInternalOpen] = useState(false);
+    const isControlled = open !== undefined;
+    const resolvedOpen = isControlled ? open : internalOpen;
 
-    async function handleOpenChange(open: boolean) {
-        if (!open) {
+    async function handleOpenChange(next: boolean) {
+        if (isControlled) {
+            onOpenChange?.(next);
+        } else {
+            setInternalOpen(next);
+        }
+
+        if (!next) {
             return;
         }
 
@@ -40,8 +52,8 @@ export function MatchesDialog({ showId, showName, trigger }: MatchesDialogProps)
     const hasAnyMatches = feeds.some(([, articles]) => articles.length > 0);
 
     return (
-        <Dialog onOpenChange={handleOpenChange}>
-            <DialogTrigger asChild>{trigger}</DialogTrigger>
+        <Dialog open={resolvedOpen} onOpenChange={handleOpenChange}>
+            {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
             <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-lg">
                 <DialogHeader>
                     <DialogTitle>Matching articles for "{showName}"</DialogTitle>

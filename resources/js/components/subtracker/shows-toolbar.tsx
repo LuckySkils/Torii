@@ -7,11 +7,26 @@ import { useEffect, useRef, useState } from 'react';
 
 interface ShowsToolbarProps {
     filters: ShowFilters;
+    years: number[];
 }
 
 const SEARCH_DEBOUNCE_MS = 400;
 
-export function ShowsToolbar({ filters }: ShowsToolbarProps) {
+/** Radix Select can't use "" as an item value, so "all"/"all-years" stand in for the unset filter on the wire. */
+const SEASON_ALL = 'all';
+const YEAR_ALL = 'all-years';
+
+function toQueryParams(filters: ShowFilters): Record<string, string> {
+    return {
+        q: filters.q,
+        tracked: filters.tracked,
+        sort: filters.sort,
+        season: filters.season ?? '',
+        year: filters.year === null ? '' : String(filters.year),
+    };
+}
+
+export function ShowsToolbar({ filters, years }: ShowsToolbarProps) {
     const [search, setSearch] = useState(filters.q);
     const [searching, setSearching] = useState(false);
 
@@ -39,7 +54,7 @@ export function ShowsToolbar({ filters }: ShowsToolbarProps) {
         cancelTokenRef.current?.cancel();
         lastSubmitted.current = next.q;
 
-        router.get('/shows', next as unknown as Record<string, string>, {
+        router.get('/shows', toQueryParams(next), {
             preserveState: true,
             preserveScroll: true,
             replace: true,
@@ -49,6 +64,11 @@ export function ShowsToolbar({ filters }: ShowsToolbarProps) {
             onStart: () => spinner && setSearching(true),
             onFinish: () => spinner && setSearching(false),
         });
+    }
+
+    function submit(overrides: Partial<ShowFilters>) {
+        clearTimeout(debounceRef.current);
+        navigate({ ...filters, q: search, ...overrides }, false);
     }
 
     function handleSearchChange(value: string) {
@@ -64,16 +84,6 @@ export function ShowsToolbar({ filters }: ShowsToolbarProps) {
         }, SEARCH_DEBOUNCE_MS);
     }
 
-    function handleTrackedChange(value: string) {
-        clearTimeout(debounceRef.current);
-        navigate({ q: search, tracked: value as ShowFilters['tracked'], sort: filters.sort }, false);
-    }
-
-    function handleSortChange(value: string) {
-        clearTimeout(debounceRef.current);
-        navigate({ q: search, tracked: filters.tracked, sort: value as ShowFilters['sort'] }, false);
-    }
-
     return (
         <div className="flex flex-wrap items-center gap-2">
             <div className="relative max-w-xs">
@@ -86,7 +96,7 @@ export function ShowsToolbar({ filters }: ShowsToolbarProps) {
                 />
                 {searching && <Loader2 className="absolute top-1/2 right-2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />}
             </div>
-            <Select value={filters.tracked} onValueChange={handleTrackedChange}>
+            <Select value={filters.tracked} onValueChange={(value) => submit({ tracked: value as ShowFilters['tracked'] })}>
                 <SelectTrigger className="w-36" aria-label="Filter by tracked status">
                     <SelectValue />
                 </SelectTrigger>
@@ -96,13 +106,45 @@ export function ShowsToolbar({ filters }: ShowsToolbarProps) {
                     <SelectItem value="no">Untracked</SelectItem>
                 </SelectContent>
             </Select>
-            <Select value={filters.sort} onValueChange={handleSortChange}>
-                <SelectTrigger className="w-40" aria-label="Sort shows">
+            <Select
+                value={filters.season ?? SEASON_ALL}
+                onValueChange={(value) => submit({ season: value === SEASON_ALL ? null : (value as ShowFilters['season']) })}
+            >
+                <SelectTrigger className="w-32" aria-label="Filter by season">
+                    <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value={SEASON_ALL}>All seasons</SelectItem>
+                    <SelectItem value="winter">Winter</SelectItem>
+                    <SelectItem value="spring">Spring</SelectItem>
+                    <SelectItem value="summer">Summer</SelectItem>
+                    <SelectItem value="autumn">Autumn</SelectItem>
+                </SelectContent>
+            </Select>
+            <Select
+                value={filters.year === null ? YEAR_ALL : String(filters.year)}
+                onValueChange={(value) => submit({ year: value === YEAR_ALL ? null : Number(value) })}
+            >
+                <SelectTrigger className="w-28" aria-label="Filter by year">
+                    <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value={YEAR_ALL}>All years</SelectItem>
+                    {years.map((year) => (
+                        <SelectItem key={year} value={String(year)}>
+                            {year}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+            <Select value={filters.sort} onValueChange={(value) => submit({ sort: value as ShowFilters['sort'] })}>
+                <SelectTrigger className="w-44" aria-label="Sort shows">
                     <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                     <SelectItem value="name">Sort: name</SelectItem>
                     <SelectItem value="last_seen">Sort: last seen</SelectItem>
+                    <SelectItem value="premiered">Premiere (newest)</SelectItem>
                 </SelectContent>
             </Select>
         </div>

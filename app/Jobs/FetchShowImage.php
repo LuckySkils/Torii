@@ -7,6 +7,7 @@ namespace App\Jobs;
 use App\Enums\ImageStatus;
 use App\Models\Show;
 use App\Models\ShowImage;
+use App\Services\Premiere\PremiereCalculator;
 use App\Services\SubsPlease\ShowImageMatcher;
 use App\Services\SubsPlease\SubsPleaseApiClient;
 use Illuminate\Bus\Queueable;
@@ -41,7 +42,7 @@ final class FetchShowImage implements ShouldBeUnique, ShouldQueue
         return (string) $this->showId;
     }
 
-    public function handle(SubsPleaseApiClient $client, ShowImageMatcher $matcher): void
+    public function handle(SubsPleaseApiClient $client, ShowImageMatcher $matcher, PremiereCalculator $premiereCalculator): void
     {
         $show = Show::find($this->showId);
 
@@ -52,7 +53,11 @@ final class FetchShowImage implements ShouldBeUnique, ShouldQueue
         $show->update(['image_status' => ImageStatus::Pending]);
 
         $results = $client->search($show->name);
-        $match = $matcher->match($results, $show->name);
+        $candidates = $matcher->candidates($results, $show->name);
+
+        $premiereCalculator->apply($show, $premiereCalculator->fromSubsPlease($candidates));
+
+        $match = $matcher->firstWithImage($candidates);
 
         if ($match === null) {
             // A miss keeps any image already stored; only the check timestamp moves.

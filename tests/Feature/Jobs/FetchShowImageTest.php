@@ -3,12 +3,15 @@
 declare(strict_types=1);
 
 use App\Enums\ImageStatus;
+use App\Enums\PremiereSource;
 use App\Jobs\FetchShowImage;
 use App\Models\Show;
 use App\Models\ShowImage;
+use App\Services\Premiere\PremiereCalculator;
 use App\Services\SubsPlease\ShowImageMatcher;
 use App\Services\SubsPlease\SubsPleaseApiClient;
 use App\Services\SubsPlease\SubsPleaseApiException;
+use Carbon\Carbon;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 
@@ -48,7 +51,7 @@ test('a matched show downloads and stores the image, and marks found', function 
 
     $show = imageJobShow();
 
-    (new FetchShowImage($show->id))->handle(new SubsPleaseApiClient, new ShowImageMatcher);
+    (new FetchShowImage($show->id))->handle(new SubsPleaseApiClient, new ShowImageMatcher, new PremiereCalculator);
 
     $show->refresh();
     $image = ShowImage::where('show_id', $show->id)->first();
@@ -65,15 +68,34 @@ test('a matched show downloads and stores the image, and marks found', function 
         ->and($image->mime)->toBe('image/jpeg');
 });
 
+test('a successful fetch also computes and stores the subsplease-sourced premiere date', function () {
+    fakeSearchAndImage();
+
+    $show = imageJobShow();
+
+    (new FetchShowImage($show->id))->handle(new SubsPleaseApiClient, new ShowImageMatcher, new PremiereCalculator);
+
+    $show->refresh();
+
+    $expectedEarliest = collect(json_decode(file_get_contents(dirname(__DIR__, 2).'/Fixtures/subsplease_search_digimon-beatbreak.json'), true))
+        ->pluck('release_date')
+        ->map(fn (string $date) => Carbon::parse($date)->utc())
+        ->sort()
+        ->first();
+
+    expect($show->premiere_source)->toBe(PremiereSource::SubsPlease)
+        ->and($show->premiered_at->equalTo($expectedEarliest))->toBeTrue();
+});
+
 test('a re-fetch with the same image bytes updates the check time but does not rewrite the row', function () {
     fakeSearchAndImage();
 
     $show = imageJobShow();
 
-    (new FetchShowImage($show->id))->handle(new SubsPleaseApiClient, new ShowImageMatcher);
+    (new FetchShowImage($show->id))->handle(new SubsPleaseApiClient, new ShowImageMatcher, new PremiereCalculator);
     $firstImage = ShowImage::where('show_id', $show->id)->first();
 
-    (new FetchShowImage($show->id))->handle(new SubsPleaseApiClient, new ShowImageMatcher);
+    (new FetchShowImage($show->id))->handle(new SubsPleaseApiClient, new ShowImageMatcher, new PremiereCalculator);
     $secondImage = ShowImage::where('show_id', $show->id)->first();
 
     expect(ShowImage::count())->toBe(1)
@@ -105,7 +127,7 @@ test('no match marks the show missing and keeps any existing stored image', func
         'fetched_at' => now()->subDay(),
     ]);
 
-    (new FetchShowImage($show->id))->handle(new SubsPleaseApiClient, new ShowImageMatcher);
+    (new FetchShowImage($show->id))->handle(new SubsPleaseApiClient, new ShowImageMatcher, new PremiereCalculator);
 
     $show->refresh();
     $stillThere = ShowImage::find($existing->id);
@@ -123,7 +145,7 @@ test('propagates the failure so the queue retries when the search API is unreach
 
     $show = imageJobShow();
 
-    (new FetchShowImage($show->id))->handle(new SubsPleaseApiClient, new ShowImageMatcher);
+    (new FetchShowImage($show->id))->handle(new SubsPleaseApiClient, new ShowImageMatcher, new PremiereCalculator);
 })->throws(ConnectionException::class);
 
 test('a repeated Cloudflare failure propagates too', function () {
@@ -133,7 +155,7 @@ test('a repeated Cloudflare failure propagates too', function () {
 
     $show = imageJobShow();
 
-    (new FetchShowImage($show->id))->handle(new SubsPleaseApiClient, new ShowImageMatcher);
+    (new FetchShowImage($show->id))->handle(new SubsPleaseApiClient, new ShowImageMatcher, new PremiereCalculator);
 })->throws(SubsPleaseApiException::class);
 
 test('failed() marks the show as error with the final exception message', function () {
@@ -160,7 +182,7 @@ test('a non-image content type is rejected without creating a stored image', fun
 
     $show = imageJobShow();
 
-    (new FetchShowImage($show->id))->handle(new SubsPleaseApiClient, new ShowImageMatcher);
+    (new FetchShowImage($show->id))->handle(new SubsPleaseApiClient, new ShowImageMatcher, new PremiereCalculator);
 
     $show->refresh();
 
@@ -181,7 +203,7 @@ test('an image over 5 MB is rejected without creating a stored image', function 
 
     $show = imageJobShow();
 
-    (new FetchShowImage($show->id))->handle(new SubsPleaseApiClient, new ShowImageMatcher);
+    (new FetchShowImage($show->id))->handle(new SubsPleaseApiClient, new ShowImageMatcher, new PremiereCalculator);
 
     $show->refresh();
 

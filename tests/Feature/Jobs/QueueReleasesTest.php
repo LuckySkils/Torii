@@ -22,6 +22,13 @@ beforeEach(function () {
     Http::preventStrayRequests();
 });
 
+// A realistic 40-char hex infohash, distinct per seed. `Infohash::normalize()`
+// rejects anything that isn't real 40-hex or 32-base32, so tests need one of those.
+function hexHash(string $seed): string
+{
+    return sha1($seed);
+}
+
 function queueableShow(): Show
 {
     return Show::create([
@@ -44,22 +51,24 @@ function queueableRelease(Show $show, array $overrides = []): Release
         'is_batch' => false,
         'resolution' => '1080p',
         'link' => 'magnet:?xt=urn:btih:AAAA'.$sequence,
-        'infohash' => 'AAAA'.$sequence,
+        'infohash' => hexHash('default-'.$sequence),
         'published_at' => now(),
         'first_seen_at' => now(),
     ], $overrides));
 }
 
 test('marks a release exists with no add call when qbit already has the hash', function () {
+    $hash = hexHash('AAAA1');
+
     Http::fake([
         'http://qbit.test:8080/api/v2/auth/login' => Http::response('Ok.', 200, ['Set-Cookie' => 'SID=abc; path=/']),
         'http://qbit.test:8080/api/v2/torrents/info*' => Http::response(json_encode([
-            ['hash' => 'aaaa1'],
+            ['hash' => $hash],
         ]), 200),
     ]);
 
     $show = queueableShow();
-    $release = queueableRelease($show, ['infohash' => 'AAAA1']);
+    $release = queueableRelease($show, ['infohash' => $hash]);
 
     (new QueueReleases([$release->id]))->handle(new QBittorrentClient);
 
@@ -78,7 +87,7 @@ test('adds a missing hash with the category and tags asserted, then marks it sen
     ]);
 
     $show = queueableShow();
-    $release = queueableRelease($show, ['infohash' => 'BBBB1', 'link' => 'magnet:?xt=urn:btih:BBBB1']);
+    $release = queueableRelease($show, ['infohash' => hexHash('BBBB1'), 'link' => 'magnet:?xt=urn:btih:BBBB1']);
 
     (new QueueReleases([$release->id]))->handle(new QBittorrentClient);
 
@@ -104,8 +113,8 @@ test('a Fails. response on one release marks only that one as error and continue
     ]);
 
     $show = queueableShow();
-    $bad = queueableRelease($show, ['infohash' => 'CCCC1', 'link' => 'magnet:?xt=urn:btih:CCCC1']);
-    $good = queueableRelease($show, ['infohash' => 'CCCC2', 'link' => 'magnet:?xt=urn:btih:CCCC2']);
+    $bad = queueableRelease($show, ['infohash' => hexHash('CCCC1'), 'link' => 'magnet:?xt=urn:btih:CCCC1']);
+    $good = queueableRelease($show, ['infohash' => hexHash('CCCC2'), 'link' => 'magnet:?xt=urn:btih:CCCC2']);
 
     (new QueueReleases([$bad->id, $good->id]))->handle(new QBittorrentClient);
 
@@ -114,13 +123,51 @@ test('a Fails. response on one release marks only that one as error and continue
         ->and($good->refresh()->dispatch_status)->toBe(DispatchStatus::Sent);
 });
 
+test('a Fails. response whose hash is found on an immediate re-check is marked exists, not error', function () {
+    $hash = hexHash('EEEE1');
+
+    Http::fake([
+        'http://qbit.test:8080/api/v2/auth/login' => Http::response('Ok.', 200, ['Set-Cookie' => 'SID=abc; path=/']),
+        'http://qbit.test:8080/api/v2/torrents/info*' => Http::sequence()
+            ->push(json_encode([]), 200)
+            ->push(json_encode([['hash' => $hash]]), 200),
+        'http://qbit.test:8080/api/v2/torrents/add' => Http::response('Fails.', 200),
+    ]);
+
+    $show = queueableShow();
+    $release = queueableRelease($show, ['infohash' => $hash, 'link' => 'magnet:?xt=urn:btih:EEEE1']);
+
+    (new QueueReleases([$release->id]))->handle(new QBittorrentClient);
+
+    expect($release->refresh()->dispatch_status)->toBe(DispatchStatus::Exists)
+        ->and($release->dispatch_error)->toBeNull();
+});
+
+test('a Fails. response whose hash is still missing on re-check stays an error', function () {
+    $hash = hexHash('FFFF1');
+
+    Http::fake([
+        'http://qbit.test:8080/api/v2/auth/login' => Http::response('Ok.', 200, ['Set-Cookie' => 'SID=abc; path=/']),
+        'http://qbit.test:8080/api/v2/torrents/info*' => Http::response(json_encode([]), 200),
+        'http://qbit.test:8080/api/v2/torrents/add' => Http::response('Fails.', 200),
+    ]);
+
+    $show = queueableShow();
+    $release = queueableRelease($show, ['infohash' => $hash, 'link' => 'magnet:?xt=urn:btih:FFFF1']);
+
+    (new QueueReleases([$release->id]))->handle(new QBittorrentClient);
+
+    expect($release->refresh()->dispatch_status)->toBe(DispatchStatus::Error)
+        ->and($release->dispatch_error)->not->toBeNull();
+});
+
 test('propagates the failure so the queue retries when qbit is unreachable', function () {
     Http::fake(function () {
         throw new ConnectionException('Connection refused');
     });
 
     $show = queueableShow();
-    $release = queueableRelease($show, ['infohash' => 'DDDD1']);
+    $release = queueableRelease($show, ['infohash' => hexHash('DDDD1')]);
 
     (new QueueReleases([$release->id]))->handle(new QBittorrentClient);
 })->throws(ConnectionException::class);

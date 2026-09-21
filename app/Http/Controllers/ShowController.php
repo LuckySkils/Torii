@@ -19,6 +19,8 @@ class ShowController extends Controller
         $search = trim((string) $request->query('q', ''));
         $tracked = (string) $request->query('tracked', 'all');
         $sort = (string) $request->query('sort', 'name');
+        $season = $this->nullableString($request->query('season'));
+        $year = $this->nullableInt($request->query('year'));
 
         $query = Show::query()->with('latestRelease');
 
@@ -32,8 +34,17 @@ class ShowController extends Controller
             $query->where('is_tracked', false);
         }
 
+        if ($season !== null) {
+            $query->where('season', $season);
+        }
+
+        if ($year !== null) {
+            $query->where('season_year', $year);
+        }
+
         match ($sort) {
             'last_seen' => $query->orderByDesc('last_seen_at'),
+            'premiered' => $query->orderByRaw('premiered_at DESC NULLS LAST'),
             default => $query->orderBy('name'),
         };
 
@@ -43,8 +54,36 @@ class ShowController extends Controller
                 'q' => $search,
                 'tracked' => $tracked,
                 'sort' => $sort,
+                'season' => $season,
+                'year' => $year,
+            ],
+            'filterOptions' => [
+                'years' => Show::query()
+                    ->whereNotNull('season_year')
+                    ->distinct()
+                    ->orderByDesc('season_year')
+                    ->pluck('season_year')
+                    ->all(),
             ],
         ]);
+    }
+
+    private function nullableString(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $value = trim((string) $value);
+
+        return $value === '' ? null : $value;
+    }
+
+    private function nullableInt(mixed $value): ?int
+    {
+        $value = $this->nullableString($value);
+
+        return $value === null ? null : (int) $value;
     }
 
     private function escapeLikeValue(string $value): string
