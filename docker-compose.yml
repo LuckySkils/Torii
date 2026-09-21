@@ -1,0 +1,36 @@
+# Torii: put this file and .env into your OMV compose folder and start it.
+# Only .env needs editing. Replace "your-github-username" below once.
+
+services:
+  torii:
+    image: ghcr.io/your-github-username/torii:latest
+    restart: unless-stopped
+    ports:
+      - "${TORII_PORT:-8080}:80"
+    environment:
+      QBIT_URL: ${QBIT_URL:?Set QBIT_URL in .env}
+      QBIT_USERNAME: ${QBIT_USERNAME:-}
+      QBIT_PASSWORD: ${QBIT_PASSWORD:-}
+      QBIT_CATEGORY: ${QBIT_CATEGORY:-anime}
+      APP_URL: ${APP_URL:-http://localhost:8080}
+      DB_PASSWORD: ${DB_PASSWORD:-torii}
+    volumes:
+      - ./data/app:/data
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: torii
+      POSTGRES_USER: torii
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-torii}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U torii -d torii"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
