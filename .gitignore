@@ -21,10 +21,21 @@ Homestead.yaml
 Homestead.json
 /.vagrant
 .phpunit.result.cache
+.phpunit.cache
 
 /public/build
 /storage/pail
+/bootstrap/ssr
 .env.backup
 .env.production
 .phpactor.json
 auth.json
+CLAUDE.md
+FRONTEND.md
+
+.DS_Store
+/.fleet
+/.idea
+/.nova
+/.vscode
+/.zed
