@@ -1,3 +1,4 @@
+import { BatchHint } from '@/components/subtracker/batch-hint';
 import { BulkBar } from '@/components/subtracker/bulk-bar';
 import { DeleteRuleDialog } from '@/components/subtracker/delete-rule-dialog';
 import { MatchesDialog } from '@/components/subtracker/matches-dialog';
@@ -11,9 +12,9 @@ import { Pagination, PaginationContent, PaginationItem, PaginationLink } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem } from '@/types';
+import { type BreadcrumbItem, type SharedData } from '@/types';
 import { type RuleState, type ShowsIndexProps } from '@/types/subtracker';
-import { Head, Link, router, usePoll } from '@inertiajs/react';
+import { Head, Link, router, usePage, usePoll } from '@inertiajs/react';
 import { Eye, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -22,6 +23,7 @@ const breadcrumbs: BreadcrumbItem[] = [{ title: 'Shows', href: '/shows' }];
 const DELETABLE_RULE_STATES: RuleState[] = ['synced', 'disabled', 'error'];
 
 export default function ShowsIndex({ shows, filters }: ShowsIndexProps) {
+    const { driver } = usePage<SharedData>().props;
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
     const hasPendingRow = shows.data.some((show) => show.ruleState === 'pending');
@@ -115,9 +117,12 @@ export default function ShowsIndex({ shows, filters }: ShowsIndexProps) {
                                                 />
                                             </TableCell>
                                             <TableCell>
-                                                <Link href={`/shows/${show.id}`} className="font-medium hover:underline">
-                                                    {show.name}
-                                                </Link>
+                                                <div className="flex items-center gap-1.5">
+                                                    <Link href={`/shows/${show.id}`} className="font-medium hover:underline">
+                                                        {show.name}
+                                                    </Link>
+                                                    {show.hasBatch && <BatchHint />}
+                                                </div>
                                             </TableCell>
                                             <TableCell>{show.latestEpisode ?? '—'}</TableCell>
                                             <TableCell>
@@ -141,24 +146,26 @@ export default function ShowsIndex({ shows, filters }: ShowsIndexProps) {
                                                 <TrackSwitch showId={show.id} showName={show.name} tracked={show.isTracked} />
                                             </TableCell>
                                             <TableCell>
-                                                <RuleBadge state={show.ruleState} error={show.ruleError} />
+                                                <RuleBadge trackingMode={show.trackingMode} state={show.ruleState} error={show.ruleError} />
                                             </TableCell>
                                             <TableCell>
                                                 <div className="flex items-center gap-1">
-                                                    <MatchesDialog
-                                                        showId={show.id}
-                                                        showName={show.name}
-                                                        trigger={
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="size-8"
-                                                                aria-label={`Preview matches for ${show.name}`}
-                                                            >
-                                                                <Eye className="size-4" />
-                                                            </Button>
-                                                        }
-                                                    />
+                                                    {driver === 'rules' && (
+                                                        <MatchesDialog
+                                                            showId={show.id}
+                                                            showName={show.name}
+                                                            trigger={
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="size-8"
+                                                                    aria-label={`Preview matches for ${show.name}`}
+                                                                >
+                                                                    <Eye className="size-4" />
+                                                                </Button>
+                                                            }
+                                                        />
+                                                    )}
                                                     {DELETABLE_RULE_STATES.includes(show.ruleState) && (
                                                         <DeleteRuleDialog
                                                             showId={show.id}

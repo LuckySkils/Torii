@@ -1,18 +1,21 @@
 import { DeleteRuleDialog } from '@/components/subtracker/delete-rule-dialog';
 import { MatchesDialog } from '@/components/subtracker/matches-dialog';
+import { QueueMissingButton } from '@/components/subtracker/queue-missing-button';
 import { RelativeTime } from '@/components/subtracker/relative-time';
 import { ReleasesTable } from '@/components/subtracker/releases-table';
 import { RuleBadge } from '@/components/subtracker/rule-badge';
 import { TrackSwitch } from '@/components/subtracker/track-switch';
 import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem } from '@/types';
+import { type BreadcrumbItem, type SharedData } from '@/types';
 import { type RuleState, type ShowShowProps } from '@/types/subtracker';
-import { Head } from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react';
 
 const DELETABLE_RULE_STATES: RuleState[] = ['synced', 'disabled', 'error'];
 
 export default function ShowShow({ show, releases }: ShowShowProps) {
+    const { driver } = usePage<SharedData>().props;
+
     const breadcrumbs: BreadcrumbItem[] = [
         { title: 'Shows', href: '/shows' },
         { title: show.name, href: `/shows/${show.id}` },
@@ -26,18 +29,21 @@ export default function ShowShow({ show, releases }: ShowShowProps) {
                     <div className="flex flex-wrap items-center gap-3">
                         <h1 className="text-xl font-medium">{show.name}</h1>
                         <TrackSwitch showId={show.id} showName={show.name} tracked={show.isTracked} />
-                        <RuleBadge state={show.ruleState} error={show.ruleError} />
+                        <RuleBadge trackingMode={show.trackingMode} state={show.ruleState} error={show.ruleError} />
 
                         <div className="ml-auto flex items-center gap-2">
-                            <MatchesDialog
-                                showId={show.id}
-                                showName={show.name}
-                                trigger={
-                                    <Button variant="outline" size="sm">
-                                        Preview matches
-                                    </Button>
-                                }
-                            />
+                            <QueueMissingButton showId={show.id} downloadableCount={show.downloadableCount} />
+                            {driver === 'rules' && (
+                                <MatchesDialog
+                                    showId={show.id}
+                                    showName={show.name}
+                                    trigger={
+                                        <Button variant="outline" size="sm">
+                                            Preview matches
+                                        </Button>
+                                    }
+                                />
+                            )}
                             {DELETABLE_RULE_STATES.includes(show.ruleState) && (
                                 <DeleteRuleDialog
                                     showId={show.id}
@@ -53,7 +59,8 @@ export default function ShowShow({ show, releases }: ShowShowProps) {
                     </div>
 
                     <p className="text-sm text-muted-foreground">
-                        Latest episode: {show.latestEpisode ?? '—'} · Last seen: <RelativeTime iso={show.lastSeenAt} />
+                        Latest episode: {show.latestEpisode ?? '—'} · First seen: <RelativeTime iso={show.firstSeenAt} /> · Last seen:{' '}
+                        <RelativeTime iso={show.lastSeenAt} /> · Queued: {show.queuedCount}
                     </p>
                 </div>
 

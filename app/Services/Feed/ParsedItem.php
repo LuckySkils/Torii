@@ -11,6 +11,8 @@ final readonly class ParsedItem
         public ?string $episode,
         public ?int $version,
         public bool $isBatch,
+        public ?int $batchFrom,
+        public ?int $batchTo,
         public ?string $resolution,
         public ?string $crc,
     ) {}

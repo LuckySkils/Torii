@@ -14,6 +14,7 @@ final class UntrackShow
     {
         $show->update([
             'is_tracked' => false,
+            'tracking_mode' => null,
             'rule_state' => RuleState::Pending,
             'rule_error' => null,
         ]);

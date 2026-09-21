@@ -4,7 +4,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { type Health } from '@/types/subtracker';
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
-import { toast } from 'sonner';
 import { RelativeTime } from './relative-time';
 
 interface HealthStripProps {
@@ -38,8 +37,6 @@ export function HealthStrip({ health }: HealthStripProps) {
             {},
             {
                 preserveScroll: true,
-                onSuccess: () => toast.success('Feed poll finished'),
-                onError: () => toast.error('Feed poll failed'),
                 onFinish: () => setPolling(false),
             },
         );
@@ -52,8 +49,6 @@ export function HealthStrip({ health }: HealthStripProps) {
             {},
             {
                 preserveScroll: true,
-                onSuccess: () => toast.success('Reconcile finished'),
-                onError: () => toast.error('Reconcile failed'),
                 onFinish: () => setReconciling(false),
             },
         );

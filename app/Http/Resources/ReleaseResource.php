@@ -25,9 +25,14 @@ final class ReleaseResource extends JsonResource
             'episode' => $this->episode,
             'version' => $this->version,
             'isBatch' => $this->is_batch,
+            'batchFrom' => $this->batch_from,
+            'batchTo' => $this->batch_to,
             'publishedAt' => $this->published_at->toIso8601String(),
             'firstSeenAt' => $this->first_seen_at->toIso8601String(),
             'link' => $this->link,
+            'dispatchStatus' => $this->dispatch_status?->value,
+            'dispatchedAt' => $this->dispatched_at?->toIso8601String(),
+            'dispatchError' => $this->dispatch_error,
         ];
     }
 }

@@ -42,8 +42,22 @@ test('parses a batch release with no episode or crc', function () {
         ->and($parsed->episode)->toBeNull()
         ->and($parsed->version)->toBeNull()
         ->and($parsed->isBatch)->toBeTrue()
+        ->and($parsed->batchFrom)->toBe(1)
+        ->and($parsed->batchTo)->toBe(12)
         ->and($parsed->resolution)->toBe('1080p')
         ->and($parsed->crc)->toBeNull();
+});
+
+test('leaves the batch range null when it does not parse as <number>-<number>', function () {
+    $parsed = $this->parser->parse(
+        '[SubsPlease] Some Show (Season 2) (1080p) [Batch]',
+        'Some Show - 1080',
+    );
+
+    expect($parsed->name)->toBe('Some Show')
+        ->and($parsed->isBatch)->toBeTrue()
+        ->and($parsed->batchFrom)->toBeNull()
+        ->and($parsed->batchTo)->toBeNull();
 });
 
 test('parses a v2 repack and captures the version number', function () {
@@ -144,7 +158,9 @@ test('every item in the real feed fixture parses with a name, and the category a
 
         if (str_contains($title, '[Batch]')) {
             expect($parsed->isBatch)->toBeTrue()
-                ->and($parsed->episode)->toBeNull();
+                ->and($parsed->episode)->toBeNull()
+                ->and($parsed->batchFrom)->not->toBeNull("Failed to parse batch range: {$title}")
+                ->and($parsed->batchTo)->toBeGreaterThan($parsed->batchFrom);
         } else {
             expect($parsed->isBatch)->toBeFalse();
         }

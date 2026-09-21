@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\DispatchStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -16,6 +17,8 @@ class Release extends Model
         'episode',
         'version',
         'is_batch',
+        'batch_from',
+        'batch_to',
         'resolution',
         'crc',
         'link',
@@ -25,6 +28,7 @@ class Release extends Model
         'first_seen_at',
         'dispatched_at',
         'dispatch_error',
+        'dispatch_status',
     ];
 
     protected function casts(): array
@@ -32,9 +36,12 @@ class Release extends Model
         return [
             'version' => 'integer',
             'is_batch' => 'boolean',
+            'batch_from' => 'integer',
+            'batch_to' => 'integer',
             'published_at' => 'datetime',
             'first_seen_at' => 'datetime',
             'dispatched_at' => 'datetime',
+            'dispatch_status' => DispatchStatus::class,
         ];
     }
 

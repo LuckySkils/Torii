@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Resources;
 
+use App\Enums\DispatchStatus;
 use App\Models\Show;
+use App\Services\Downloads\DownloadPlanner;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -22,6 +24,7 @@ final class ShowResource extends JsonResource
             'firstSeenAt' => $this->first_seen_at->toIso8601String(),
             'lastSeenAt' => $this->last_seen_at->toIso8601String(),
             'isTracked' => $this->is_tracked,
+            'trackingMode' => $this->tracking_mode?->value,
             'ruleState' => $this->rule_state->value,
             'ruleError' => $this->rule_error,
             'latestRelease' => $this->whenLoaded('latestRelease', fn () => $this->latestRelease === null ? null : [
@@ -29,6 +32,9 @@ final class ShowResource extends JsonResource
                 'publishedAt' => $this->latestRelease->published_at->toIso8601String(),
                 'link' => $this->latestRelease->link,
             ]),
+            'hasBatch' => $this->releases()->where('is_batch', true)->exists(),
+            'queuedCount' => $this->releases()->whereIn('dispatch_status', [DispatchStatus::Sent, DispatchStatus::Exists])->count(),
+            'downloadableCount' => app(DownloadPlanner::class)->downloadableSet($this->resource)->count(),
         ];
     }
 }

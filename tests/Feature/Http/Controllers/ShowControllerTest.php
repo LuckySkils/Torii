@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Enums\DispatchStatus;
+use App\Enums\TrackingMode;
 use App\Models\Release;
 use App\Models\Show;
 
@@ -85,6 +87,43 @@ test('search is case-insensitive and treats %, _ and \\ as literal characters', 
     $this->get('/shows?q=nonexistent')->assertInertia(fn ($page) => $page->has('shows.data', 0));
 });
 
+test('index exposes tracking mode, batch presence, and queued/downloadable counts', function () {
+    $show = makeIndexableShow('Grand Blue S3', true, '2026-09-20 00:00:00');
+    $show->update(['tracking_mode' => TrackingMode::Batch]);
+
+    Release::create([
+        'show_id' => $show->id,
+        'guid' => 'GUID-BATCH',
+        'title' => 'batch',
+        'is_batch' => true,
+        'batch_from' => 1,
+        'batch_to' => 12,
+        'resolution' => '1080p',
+        'link' => 'magnet:?xt=urn:btih:AAAA',
+        'published_at' => now(),
+        'first_seen_at' => now(),
+        'dispatch_status' => DispatchStatus::Sent,
+    ]);
+    Release::create([
+        'show_id' => $show->id,
+        'guid' => 'GUID-13',
+        'title' => 'ep13',
+        'episode' => '13',
+        'is_batch' => false,
+        'resolution' => '1080p',
+        'link' => 'magnet:?xt=urn:btih:BBBB',
+        'published_at' => now(),
+        'first_seen_at' => now(),
+    ]);
+
+    $this->get('/shows')->assertInertia(function ($page) {
+        $page->where('shows.data.0.trackingMode', 'batch')
+            ->where('shows.data.0.hasBatch', true)
+            ->where('shows.data.0.queuedCount', 1)
+            ->where('shows.data.0.downloadableCount', 1);
+    });
+});
+
 test('show renders the show and all of its releases newest first', function () {
     $show = makeIndexableShow('Grand Blue S3', false, '2026-09-20 00:00:00');
 
@@ -93,10 +132,14 @@ test('show renders the show and all of its releases newest first', function () {
         'guid' => 'GUID-1',
         'title' => 'older batch',
         'is_batch' => true,
+        'batch_from' => 1,
+        'batch_to' => 12,
         'resolution' => '1080p',
         'link' => 'magnet:?xt=urn:btih:AAAA',
         'published_at' => '2026-09-19 00:00:00',
         'first_seen_at' => '2026-09-19 00:05:00',
+        'dispatch_status' => DispatchStatus::Error,
+        'dispatch_error' => 'boom',
     ]);
     Release::create([
         'show_id' => $show->id,
@@ -122,9 +165,14 @@ test('show renders the show and all of its releases newest first', function () {
             ->where('releases.0.title', 'newer v2')
             ->where('releases.0.version', 2)
             ->where('releases.0.isBatch', false)
+            ->where('releases.0.dispatchStatus', null)
             ->where('releases.1.title', 'older batch')
             ->where('releases.1.version', null)
             ->where('releases.1.isBatch', true)
+            ->where('releases.1.batchFrom', 1)
+            ->where('releases.1.batchTo', 12)
+            ->where('releases.1.dispatchStatus', 'error')
+            ->where('releases.1.dispatchError', 'boom')
             ->missing('stats');
     });
 });

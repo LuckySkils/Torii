@@ -4,6 +4,10 @@ export type DriverMode = 'rules' | 'push';
 
 export type PollMode = 'base' | 'hot';
 
+export type TrackingMode = 'rule' | 'batch';
+
+export type DispatchStatus = 'sent' | 'exists' | 'error';
+
 export interface QbitHealth {
     reachable: boolean;
     version: string | null;
@@ -35,21 +39,22 @@ export interface ReleaseShowRef {
     name: string;
 }
 
-/**
- * Mirrors ReleaseResource. `version` and `isBatch` are not sent by the
- * backend yet (see the frontend report); keep them optional and render
- * the v2/batch badges only when present.
- */
+/** Mirrors ReleaseResource exactly (CLAUDE.md §8). */
 export interface ReleaseSummary {
     id: number;
     title: string;
     show: ReleaseShowRef | null;
     episode: string | null;
+    version: number | null;
+    isBatch: boolean;
+    batchFrom: number | null;
+    batchTo: number | null;
     publishedAt: string;
     firstSeenAt: string;
     link: string;
-    version?: number | null;
-    isBatch?: boolean;
+    dispatchStatus: DispatchStatus | null;
+    dispatchedAt: string | null;
+    dispatchError: string | null;
 }
 
 export interface DashboardProps {
@@ -63,15 +68,22 @@ export interface ShowLatestRelease {
     link: string;
 }
 
-export interface ShowListItem {
+/** Mirrors ShowResource exactly (CLAUDE.md §8) — one row of `shows`, or the `show` prop on Shows/Show. */
+export interface ShowSummary {
     id: number;
     name: string;
     latestEpisode: string | null;
+    firstSeenAt: string;
     lastSeenAt: string;
     isTracked: boolean;
+    trackingMode: TrackingMode | null;
     ruleState: RuleState;
     ruleError: string | null;
-    latestRelease: ShowLatestRelease | null;
+    /** Only present when the controller eager-loaded the relation (true on Shows/Index, absent on Shows/Show). */
+    latestRelease?: ShowLatestRelease | null;
+    hasBatch: boolean;
+    queuedCount: number;
+    downloadableCount: number;
 }
 
 export interface PaginationLinkItem {
@@ -83,7 +95,7 @@ export interface PaginationLinkItem {
 
 /** Shape produced by ShowResource::collection($paginator) via Inertia. */
 export interface PaginatedShows {
-    data: ShowListItem[];
+    data: ShowSummary[];
     links: {
         first: string | null;
         last: string | null;
@@ -113,18 +125,8 @@ export interface ShowsIndexProps {
     filters: ShowFilters;
 }
 
-export interface ShowDetail {
-    id: number;
-    name: string;
-    latestEpisode: string | null;
-    lastSeenAt: string;
-    isTracked: boolean;
-    ruleState: RuleState;
-    ruleError: string | null;
-}
-
 export interface ShowShowProps {
-    show: ShowDetail;
+    show: ShowSummary;
     releases: ReleaseSummary[];
 }
 

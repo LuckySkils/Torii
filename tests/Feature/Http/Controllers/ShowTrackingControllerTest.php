@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 
+use App\Enums\DispatchStatus;
 use App\Enums\RuleState;
+use App\Jobs\QueueReleases;
 use App\Jobs\SyncShowRule;
+use App\Models\Release;
 use App\Models\Show;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
@@ -98,6 +101,53 @@ test('delete-rule flashes an error and leaves the show untouched when qbit is un
     $response->assertSessionHas('error');
     $show->refresh();
     expect($show->rule_state)->toBe(RuleState::Synced);
+});
+
+test('queue-missing queues the downloadable set and flashes a count', function () {
+    Queue::fake();
+    $show = makeTrackableShow();
+
+    $release = Release::create([
+        'show_id' => $show->id,
+        'guid' => 'GUID-QM',
+        'title' => 'irrelevant',
+        'episode' => '01',
+        'is_batch' => false,
+        'resolution' => '1080p',
+        'link' => 'magnet:?xt=urn:btih:AAAA',
+        'published_at' => now(),
+        'first_seen_at' => now(),
+    ]);
+
+    $response = $this->post("/shows/{$show->id}/queue-missing");
+
+    $response->assertRedirect();
+    $response->assertSessionHas('success', 'Queued 1 releases.');
+    Queue::assertPushed(QueueReleases::class, fn ($job) => $job->releaseIds === [$release->id]);
+});
+
+test('queue-missing flashes nothing-to-queue when the show has nothing left to download', function () {
+    Queue::fake();
+    $show = makeTrackableShow();
+
+    Release::create([
+        'show_id' => $show->id,
+        'guid' => 'GUID-QM-DONE',
+        'title' => 'irrelevant',
+        'episode' => '01',
+        'is_batch' => false,
+        'resolution' => '1080p',
+        'link' => 'magnet:?xt=urn:btih:AAAA',
+        'published_at' => now(),
+        'first_seen_at' => now(),
+        'dispatch_status' => DispatchStatus::Sent,
+    ]);
+
+    $response = $this->post("/shows/{$show->id}/queue-missing");
+
+    $response->assertRedirect();
+    $response->assertSessionHas('success', 'Nothing to queue.');
+    Queue::assertNotPushed(QueueReleases::class);
 });
 
 test('matches returns the raw matchingArticles payload as json', function () {

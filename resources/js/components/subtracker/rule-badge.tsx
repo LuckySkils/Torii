@@ -1,14 +1,26 @@
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { type RuleState } from '@/types/subtracker';
+import { type RuleState, type TrackingMode } from '@/types/subtracker';
 import { Loader2 } from 'lucide-react';
 
 interface RuleBadgeProps {
+    trackingMode: TrackingMode | null;
     state: RuleState;
     error: string | null;
 }
 
-export function RuleBadge({ state, error }: RuleBadgeProps) {
+export function RuleBadge({ trackingMode, state, error }: RuleBadgeProps) {
+    if (trackingMode === 'batch') {
+        return (
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Badge variant="secondary">batch</Badge>
+                </TooltipTrigger>
+                <TooltipContent>Tracked via batch download; no qBit rule was created.</TooltipContent>
+            </Tooltip>
+        );
+    }
+
     if (state === 'none') {
         return <span className="text-sm text-muted-foreground">—</span>;
     }

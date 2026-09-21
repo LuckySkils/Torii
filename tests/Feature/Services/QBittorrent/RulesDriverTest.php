@@ -205,7 +205,7 @@ test('reconcile creates missing rules, updates wrong ones, disables untracked-bu
             '[ST] Already Correct' => [
                 'enabled' => true,
                 'mustContain' => '^\[SubsPlease\] Already Correct - \d',
-                'mustNotContain' => '',
+                'mustNotContain' => '\[Batch\]',
                 'useRegex' => true,
                 'episodeFilter' => '',
                 'smartFilter' => true,

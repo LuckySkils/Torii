@@ -126,5 +126,7 @@ test('marks batch releases with is_batch true and a null episode', function () {
     $release = Release::where('guid', 'GUID-BATCH')->first();
 
     expect($release->is_batch)->toBeTrue()
-        ->and($release->episode)->toBeNull();
+        ->and($release->episode)->toBeNull()
+        ->and($release->batch_from)->toBe(1)
+        ->and($release->batch_to)->toBe(12);
 });

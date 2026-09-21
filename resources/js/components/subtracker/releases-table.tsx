@@ -4,6 +4,8 @@ import { formatDelay } from '@/lib/dates';
 import { type ReleaseSummary } from '@/types/subtracker';
 import { Link } from '@inertiajs/react';
 import { CopyLinkButton } from './copy-link-button';
+import { DispatchBadge } from './dispatch-badge';
+import { DownloadButton } from './download-button';
 import { RelativeTime } from './relative-time';
 
 interface ReleasesTableProps {
@@ -30,7 +32,8 @@ export function ReleasesTable({ releases, showColumn = false, versionColumn = fa
                         <TableHead>Published</TableHead>
                         <TableHead>First seen</TableHead>
                         <TableHead>Delay</TableHead>
-                        <TableHead className="w-10" />
+                        <TableHead>Status</TableHead>
+                        <TableHead className="w-20" />
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -76,7 +79,15 @@ export function ReleasesTable({ releases, showColumn = false, versionColumn = fa
                             </TableCell>
                             <TableCell>{formatDelay(release.publishedAt, release.firstSeenAt)}</TableCell>
                             <TableCell>
-                                <CopyLinkButton link={release.link} label={`Copy link for ${release.title}`} />
+                                <DispatchBadge status={release.dispatchStatus} error={release.dispatchError} />
+                            </TableCell>
+                            <TableCell>
+                                <div className="flex items-center gap-1">
+                                    {release.dispatchStatus !== 'sent' && release.dispatchStatus !== 'exists' && (
+                                        <DownloadButton releaseId={release.id} title={release.title} retry={release.dispatchStatus === 'error'} />
+                                    )}
+                                    <CopyLinkButton link={release.link} label={`Copy link for ${release.title}`} />
+                                </div>
                             </TableCell>
                         </TableRow>
                     ))}

@@ -121,3 +121,50 @@ test('sends the rule definition as a JSON string in a form-encoded post', functi
             && $request['ruleDef'] === json_encode(['enabled' => false, 'mustContain' => 'selftest']);
     });
 });
+
+test('getTorrentsInfo sends pipe-separated hashes', function () {
+    configureQbit();
+    Http::fake([
+        'http://qbit.test:8080/api/v2/auth/login' => Http::response('Ok.', 200, ['Set-Cookie' => 'SID=abc123; path=/']),
+        'http://qbit.test:8080/api/v2/torrents/info*' => Http::response(json_encode([
+            ['hash' => 'aaaa', 'name' => 'Existing Torrent'],
+        ]), 200),
+    ]);
+
+    $info = (new QBittorrentClient)->getTorrentsInfo(['aaaa', 'bbbb']);
+
+    expect($info)->toBe([['hash' => 'aaaa', 'name' => 'Existing Torrent']]);
+
+    Http::assertSent(fn ($request) => str_contains($request->url(), 'torrents/info')
+        && $request['hashes'] === 'aaaa|bbbb');
+});
+
+test('addTorrent sends the category and tags but never savepath, paused or stopped', function () {
+    configureQbit();
+    Http::fake([
+        'http://qbit.test:8080/api/v2/auth/login' => Http::response('Ok.', 200, ['Set-Cookie' => 'SID=abc123; path=/']),
+        'http://qbit.test:8080/api/v2/torrents/add' => Http::response('Ok.', 200),
+    ]);
+
+    (new QBittorrentClient)->addTorrent('magnet:?xt=urn:btih:AAAA', 'Anime', 'subtracker');
+
+    Http::assertSent(function ($request) {
+        return $request->url() === 'http://qbit.test:8080/api/v2/torrents/add'
+            && $request['urls'] === 'magnet:?xt=urn:btih:AAAA'
+            && $request['category'] === 'Anime'
+            && $request['tags'] === 'subtracker'
+            && ! isset($request['savepath'])
+            && ! isset($request['paused'])
+            && ! isset($request['stopped']);
+    });
+});
+
+test('addTorrent throws when qbit responds Fails.', function () {
+    configureQbit();
+    Http::fake([
+        'http://qbit.test:8080/api/v2/auth/login' => Http::response('Ok.', 200, ['Set-Cookie' => 'SID=abc123; path=/']),
+        'http://qbit.test:8080/api/v2/torrents/add' => Http::response('Fails.', 200),
+    ]);
+
+    (new QBittorrentClient)->addTorrent('magnet:?xt=urn:btih:AAAA', 'Anime', 'subtracker');
+})->throws(QBittorrentException::class);

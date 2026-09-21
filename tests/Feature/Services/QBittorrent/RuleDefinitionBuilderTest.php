@@ -14,7 +14,7 @@ test('build returns the full rule definition shape', function () {
     expect($rule)->toBe([
         'enabled' => true,
         'mustContain' => '^\[SubsPlease\] Grand Blue S3 - \d',
-        'mustNotContain' => '',
+        'mustNotContain' => '\[Batch\]',
         'useRegex' => true,
         'episodeFilter' => '',
         'smartFilter' => true,
@@ -30,6 +30,27 @@ test('the regex does not match a sequel season or a subtitled release of a diffe
     expect(preg_match('#'.$pattern.'#', '[SubsPlease] Show Season 2 - 01 (1080p) [ABCD1234].mkv'))->toBe(0)
         ->and(preg_match('#'.$pattern.'#', '[SubsPlease] Show - Subtitle - 01 (1080p) [ABCD1234].mkv'))->toBe(0)
         ->and(preg_match('#'.$pattern.'#', '[SubsPlease] Show - 01 (1080p) [ABCD1234].mkv'))->toBe(1);
+});
+
+test('mustNotContain excludes every batch title, including synthetic ones with an unparseable range', function () {
+    $builder = new RuleDefinitionBuilder;
+    $mustNotContainPattern = '#'.$builder->buildMustNotContain().'#';
+
+    $batchTitles = [
+        '[SubsPlease] Mujikaku Seijo wa Kyou mo Muishiki ni Chikara wo Tare Nagasu (01-12) (1080p) [Batch]',
+        '[SubsPlease] Neko to Ryuu (01-12) (1080p) [Batch]',
+        '[SubsPlease] Some Show (Season 2) (1080p) [Batch]',
+    ];
+
+    foreach ($batchTitles as $title) {
+        expect(preg_match($mustNotContainPattern, $title))->toBe(1, "mustNotContain failed to match batch title: {$title}");
+    }
+
+    // And the must-contain side never matches a batch title in the first place, so both conditions agree.
+    foreach ($batchTitles as $title) {
+        $pattern = '#'.$builder->buildMustContain('anything').'#';
+        expect(preg_match($pattern, $title))->toBe(0);
+    }
 });
 
 test('every show rule regex matches exactly that show\'s non-batch titles in the real fixture and nothing else', function () {
@@ -50,6 +71,8 @@ test('every show rule regex matches exactly that show\'s non-batch titles in the
 
     expect(count($itemsByShow))->toBeGreaterThan(1);
 
+    $mustNotContainPattern = '#'.$builder->buildMustNotContain().'#';
+
     foreach ($itemsByShow as $showName => $items) {
         $pattern = '#'.$builder->buildMustContain($showName).'#';
 
@@ -57,7 +80,9 @@ test('every show rule regex matches exactly that show\'s non-batch titles in the
             $matches = preg_match($pattern, $item['title']) === 1;
 
             if ($item['isBatch']) {
-                expect($matches)->toBeFalse("Batch title unexpectedly matched [{$showName}]'s rule: {$item['title']}");
+                expect($matches)->toBeFalse("Batch title unexpectedly matched [{$showName}]'s rule: {$item['title']}")
+                    ->and(preg_match($mustNotContainPattern, $item['title']))
+                    ->toBe(1, "mustNotContain failed to exclude batch title: {$item['title']}");
             } else {
                 expect($matches)->toBeTrue("Title failed to match its own show [{$showName}]'s rule: {$item['title']}");
             }

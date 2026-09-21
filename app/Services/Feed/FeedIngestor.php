@@ -113,6 +113,8 @@ final class FeedIngestor
             'episode' => $parsed->episode,
             'version' => $parsed->version,
             'is_batch' => $parsed->isBatch,
+            'batch_from' => $parsed->batchFrom,
+            'batch_to' => $parsed->batchTo,
             'resolution' => $parsed->resolution ?? '',
             'crc' => $parsed->crc,
             'link' => $link,

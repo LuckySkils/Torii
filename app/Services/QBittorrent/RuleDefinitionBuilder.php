@@ -6,6 +6,8 @@ namespace App\Services\QBittorrent;
 
 final class RuleDefinitionBuilder
 {
+    private const MUST_NOT_CONTAIN = '\[Batch\]';
+
     /**
      * @return array<string, mixed>
      */
@@ -14,7 +16,7 @@ final class RuleDefinitionBuilder
         return [
             'enabled' => true,
             'mustContain' => $this->buildMustContain($showName),
-            'mustNotContain' => '',
+            'mustNotContain' => self::MUST_NOT_CONTAIN,
             'useRegex' => true,
             'episodeFilter' => '',
             'smartFilter' => true,
@@ -27,5 +29,10 @@ final class RuleDefinitionBuilder
     public function buildMustContain(string $showName): string
     {
         return '^\[SubsPlease\] '.preg_quote($showName).' - \d';
+    }
+
+    public function buildMustNotContain(): string
+    {
+        return self::MUST_NOT_CONTAIN;
     }
 }

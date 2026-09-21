@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\RuleState;
+use App\Enums\TrackingMode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -20,6 +21,7 @@ class Show extends Model
         'last_seen_at',
         'latest_episode',
         'is_tracked',
+        'tracking_mode',
         'tracked_at',
         'rule_state',
         'rule_synced_at',
@@ -32,6 +34,7 @@ class Show extends Model
             'first_seen_at' => 'datetime',
             'last_seen_at' => 'datetime',
             'is_tracked' => 'boolean',
+            'tracking_mode' => TrackingMode::class,
             'tracked_at' => 'datetime',
             'rule_state' => RuleState::class,
             'rule_synced_at' => 'datetime',
