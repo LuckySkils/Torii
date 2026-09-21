@@ -3,10 +3,18 @@
 declare(strict_types=1);
 
 use App\Events\NewReleaseDetected;
+use App\Events\ShowDiscovered;
 use App\Models\Release;
 use App\Models\Show;
 use App\Services\Feed\FeedIngestor;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Queue;
+
+beforeEach(function () {
+    // Creating a show synchronously dispatches ShowDiscovered, whose listener queues
+    // FetchShowImage; with the sync queue driver in tests that would run for real.
+    Queue::fake();
+});
 
 function sampleFeedXml(array $items): string
 {
@@ -114,6 +122,35 @@ test('updates last_seen_at and latest_episode on the show when a new episode arr
     expect(Show::count())->toBe(1)
         ->and($show->latest_episode)->toBe('02')
         ->and($show->first_seen_at->equalTo($firstSeenAt))->toBeTrue();
+});
+
+test('dispatches ShowDiscovered exactly once when a show is first seen', function () {
+    $xml = sampleFeedXml([
+        sampleItem('[SubsPlease] Test Show - 01 (1080p) [ABCD1234].mkv', 'GUID-1', 'Test Show - 1080'),
+    ]);
+
+    Event::fake();
+
+    (new FeedIngestor)->ingest($xml);
+
+    Event::assertDispatchedTimes(ShowDiscovered::class, 1);
+});
+
+test('does not dispatch ShowDiscovered again for an already-known show', function () {
+    $first = sampleFeedXml([
+        sampleItem('[SubsPlease] Test Show - 01 (1080p) [ABCD1234].mkv', 'GUID-1', 'Test Show - 1080'),
+    ]);
+    $second = sampleFeedXml([
+        sampleItem('[SubsPlease] Test Show - 02 (1080p) [EF012345].mkv', 'GUID-2', 'Test Show - 1080'),
+    ]);
+
+    (new FeedIngestor)->ingest($first);
+
+    Event::fake();
+
+    (new FeedIngestor)->ingest($second);
+
+    Event::assertNotDispatched(ShowDiscovered::class);
 });
 
 test('marks batch releases with is_batch true and a null episode', function () {

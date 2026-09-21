@@ -14,9 +14,9 @@ export function RuleBadge({ trackingMode, state, error }: RuleBadgeProps) {
         return (
             <Tooltip>
                 <TooltipTrigger asChild>
-                    <Badge variant="secondary">batch</Badge>
+                    <Badge className="border-transparent bg-blue-600 text-white hover:bg-blue-600/90">batch</Badge>
                 </TooltipTrigger>
-                <TooltipContent>Tracked via batch download; no qBit rule was created.</TooltipContent>
+                <TooltipContent>Downloaded as a batch; no RSS rule</TooltipContent>
             </Tooltip>
         );
     }

@@ -6,8 +6,12 @@ use App\Models\FeedPoll;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 
 test('force fetches immediately and records a poll on a fresh feed', function () {
+    // Ingesting new shows dispatches ShowDiscovered -> FetchShowImage; with the sync
+    // queue driver in tests that would otherwise run for real.
+    Queue::fake();
     Http::preventStrayRequests();
     Http::fake([
         config('subtracker.feed.url') => Http::response(

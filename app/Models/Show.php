@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\ImageStatus;
 use App\Enums\RuleState;
 use App\Enums\TrackingMode;
 use Illuminate\Database\Eloquent\Model;
@@ -26,6 +27,9 @@ class Show extends Model
         'rule_state',
         'rule_synced_at',
         'rule_error',
+        'image_status',
+        'image_checked_at',
+        'image_error',
     ];
 
     protected function casts(): array
@@ -38,6 +42,8 @@ class Show extends Model
             'tracked_at' => 'datetime',
             'rule_state' => RuleState::class,
             'rule_synced_at' => 'datetime',
+            'image_status' => ImageStatus::class,
+            'image_checked_at' => 'datetime',
         ];
     }
 
@@ -49,5 +55,10 @@ class Show extends Model
     public function latestRelease(): HasOne
     {
         return $this->hasOne(Release::class)->latestOfMany('published_at');
+    }
+
+    public function image(): HasOne
+    {
+        return $this->hasOne(ShowImage::class);
     }
 }

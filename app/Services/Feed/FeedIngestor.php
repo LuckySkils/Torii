@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Feed;
 
 use App\Events\NewReleaseDetected;
+use App\Events\ShowDiscovered;
 use App\Models\Release;
 use App\Models\Show;
 use Carbon\Carbon;
@@ -82,6 +83,8 @@ final class FeedIngestor
                 'last_seen_at' => now(),
                 'latest_episode' => $episode,
             ]);
+
+            ShowDiscovered::dispatch($show);
 
             return [$show, true];
         }

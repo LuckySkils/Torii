@@ -29,6 +29,7 @@ function HealthBadge({ ok, label, tooltip }: { ok: boolean; label: string; toolt
 export function HealthStrip({ health }: HealthStripProps) {
     const [polling, setPolling] = useState(false);
     const [reconciling, setReconciling] = useState(false);
+    const [fetchingImages, setFetchingImages] = useState(false);
 
     function forcePoll() {
         setPolling(true);
@@ -50,6 +51,18 @@ export function HealthStrip({ health }: HealthStripProps) {
             {
                 preserveScroll: true,
                 onFinish: () => setReconciling(false),
+            },
+        );
+    }
+
+    function fetchMissingImages() {
+        setFetchingImages(true);
+        router.post(
+            '/images/refresh-missing',
+            {},
+            {
+                preserveScroll: true,
+                onFinish: () => setFetchingImages(false),
             },
         );
     }
@@ -110,6 +123,9 @@ export function HealthStrip({ health }: HealthStripProps) {
                     </Button>
                     <Button size="sm" variant="outline" disabled={reconciling} onClick={reconcile}>
                         {reconciling ? 'Reconciling…' : 'Reconcile qBit'}
+                    </Button>
+                    <Button size="sm" variant="outline" disabled={fetchingImages} onClick={fetchMissingImages}>
+                        {fetchingImages ? 'Fetching…' : 'Fetch missing images'}
                     </Button>
                 </div>
             </div>

@@ -15,10 +15,25 @@ interface ReleasesTableProps {
     emptyMessage?: string;
 }
 
+function episodeLabel(release: ReleaseSummary): string {
+    if (release.isBatch) {
+        if (release.batchFrom != null && release.batchTo != null) {
+            return `${String(release.batchFrom).padStart(2, '0')}–${String(release.batchTo).padStart(2, '0')}`;
+        }
+
+        return '—';
+    }
+
+    return release.episode ?? '—';
+}
+
 export function ReleasesTable({ releases, showColumn = false, versionColumn = false, emptyMessage = 'No releases yet.' }: ReleasesTableProps) {
     if (releases.length === 0) {
         return <p className="p-4 text-sm text-muted-foreground">{emptyMessage}</p>;
     }
+
+    // Stable sort: batches float to the top, published-date order preserved within each group.
+    const sorted = [...releases].sort((a, b) => Number(b.isBatch) - Number(a.isBatch));
 
     return (
         <div className="overflow-x-auto rounded-xl border">
@@ -37,11 +52,11 @@ export function ReleasesTable({ releases, showColumn = false, versionColumn = fa
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {releases.map((release) => (
+                    {sorted.map((release) => (
                         <TableRow key={release.id}>
                             {versionColumn && (
                                 <TableCell className="whitespace-nowrap">
-                                    {release.episode ?? '—'}
+                                    {episodeLabel(release)}
                                     {release.version != null && release.version > 1 && (
                                         <Badge variant="outline" className="ml-1">
                                             v{release.version}
@@ -79,7 +94,7 @@ export function ReleasesTable({ releases, showColumn = false, versionColumn = fa
                             </TableCell>
                             <TableCell>{formatDelay(release.publishedAt, release.firstSeenAt)}</TableCell>
                             <TableCell>
-                                <DispatchBadge status={release.dispatchStatus} error={release.dispatchError} />
+                                <DispatchBadge status={release.dispatchStatus} dispatchedAt={release.dispatchedAt} error={release.dispatchError} />
                             </TableCell>
                             <TableCell>
                                 <div className="flex items-center gap-1">

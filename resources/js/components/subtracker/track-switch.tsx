@@ -2,22 +2,26 @@ import { Switch } from '@/components/ui/switch';
 import { router } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { TrackConfirmDialog } from './track-confirm-dialog';
 
 interface TrackSwitchProps {
     showId: number;
     showName: string;
     tracked: boolean;
+    downloadableCount: number;
+    hasBatch: boolean;
 }
 
-export function TrackSwitch({ showId, showName, tracked }: TrackSwitchProps) {
+export function TrackSwitch({ showId, showName, tracked, downloadableCount, hasBatch }: TrackSwitchProps) {
     const [checked, setChecked] = useState(tracked);
     const [pending, setPending] = useState(false);
+    const [confirmOpen, setConfirmOpen] = useState(false);
 
     useEffect(() => {
         setChecked(tracked);
     }, [tracked]);
 
-    function handleChange(next: boolean) {
+    function commit(next: boolean) {
         setChecked(next);
         setPending(true);
 
@@ -36,5 +40,27 @@ export function TrackSwitch({ showId, showName, tracked }: TrackSwitchProps) {
         );
     }
 
-    return <Switch checked={checked} disabled={pending} onCheckedChange={handleChange} aria-label={`Track ${showName}`} />;
+    function handleChange(next: boolean) {
+        if (next && downloadableCount > 0) {
+            setConfirmOpen(true);
+            return;
+        }
+
+        commit(next);
+    }
+
+    return (
+        <>
+            <Switch checked={checked} disabled={pending} onCheckedChange={handleChange} aria-label={`Track ${showName}`} />
+            <TrackConfirmDialog
+                open={confirmOpen}
+                onOpenChange={setConfirmOpen}
+                description={`This will queue ${downloadableCount} release${downloadableCount === 1 ? '' : 's'} for download${hasBatch ? ' as one batch' : ''}.`}
+                onConfirm={() => {
+                    setConfirmOpen(false);
+                    commit(true);
+                }}
+            />
+        </>
+    );
 }

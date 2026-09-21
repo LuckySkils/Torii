@@ -3,9 +3,11 @@
 declare(strict_types=1);
 
 use App\Enums\DispatchStatus;
+use App\Enums\ImageStatus;
 use App\Enums\TrackingMode;
 use App\Models\Release;
 use App\Models\Show;
+use App\Models\ShowImage;
 
 function makeIndexableShow(string $name, bool $tracked, string $lastSeen): Show
 {
@@ -122,6 +124,35 @@ test('index exposes tracking mode, batch presence, and queued/downloadable count
             ->where('shows.data.0.queuedCount', 1)
             ->where('shows.data.0.downloadableCount', 1);
     });
+});
+
+test('index exposes image status and a versioned image URL once an image is stored', function () {
+    $withImage = makeIndexableShow('Grand Blue S3', false, '2026-09-20 00:00:00');
+    $withImage->update(['image_status' => ImageStatus::Found]);
+    $bytes = 'fake-bytes';
+    ShowImage::create([
+        'show_id' => $withImage->id,
+        'source_url' => 'https://subsplease.org/poster.jpg',
+        'mime' => 'image/jpeg',
+        'data' => base64_encode($bytes),
+        'size' => strlen($bytes),
+        'width' => 10,
+        'height' => 10,
+        'sha256' => hash('sha256', $bytes),
+        'fetched_at' => now(),
+    ]);
+
+    $withoutImage = makeIndexableShow('One Piece', false, '2026-09-19 00:00:00');
+
+    $this->get('/shows?sort=last_seen')->assertInertia(function ($page) use ($withImage) {
+        $page->where('shows.data.0.imageStatus', 'found')
+            ->where('shows.data.0.imageUrl', "/shows/{$withImage->id}/image?v=".substr(hash('sha256', 'fake-bytes'), 0, 8));
+    });
+
+    $this->get('/shows?q=One')->assertInertia(fn ($page) => $page->where('shows.data.0.imageStatus', 'none')
+        ->where('shows.data.0.imageUrl', null));
+
+    expect($withoutImage)->not->toBeNull();
 });
 
 test('show renders the show and all of its releases newest first', function () {

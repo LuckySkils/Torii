@@ -8,6 +8,8 @@ export type TrackingMode = 'rule' | 'batch';
 
 export type DispatchStatus = 'sent' | 'exists' | 'error';
 
+export type ImageStatus = 'none' | 'pending' | 'found' | 'missing' | 'error';
+
 export interface QbitHealth {
     reachable: boolean;
     version: string | null;
@@ -84,6 +86,10 @@ export interface ShowSummary {
     hasBatch: boolean;
     queuedCount: number;
     downloadableCount: number;
+    imageUrl: string | null;
+    imageStatus: ImageStatus;
+    imageCheckedAt: string | null;
+    imageError: string | null;
 }
 
 export interface PaginationLinkItem {
