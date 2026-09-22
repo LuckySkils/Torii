@@ -1,11 +1,11 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { type SharedData } from '@/types';
 import { type Health } from '@/types/subtracker';
 import { router, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import { RelativeTime } from './relative-time';
+import { TapInfo } from './tap-info';
 
 interface HealthStripProps {
     health: Health;
@@ -13,17 +13,18 @@ interface HealthStripProps {
 
 function HealthBadge({ ok, label, tooltip }: { ok: boolean; label: string; tooltip: string }) {
     return (
-        <Tooltip>
-            <TooltipTrigger asChild>
+        <TapInfo
+            trigger={
                 <Badge
                     variant={ok ? 'default' : 'destructive'}
-                    className={ok ? 'border-transparent bg-green-600 text-white hover:bg-green-600/90' : undefined}
+                    className={`cursor-pointer justify-center py-1 ${ok ? 'border-transparent bg-green-600 text-white hover:bg-green-600/90' : ''}`}
                 >
                     {label}
                 </Badge>
-            </TooltipTrigger>
-            <TooltipContent>{tooltip}</TooltipContent>
-        </Tooltip>
+            }
+        >
+            {tooltip}
+        </TapInfo>
     );
 }
 
@@ -84,7 +85,7 @@ export function HealthStrip({ health }: HealthStripProps) {
 
     return (
         <section className="flex flex-col gap-3 rounded-xl border p-4">
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
                 <HealthBadge
                     ok={health.qbit.reachable}
                     label="Reachable"
@@ -110,8 +111,9 @@ export function HealthStrip({ health }: HealthStripProps) {
                     label="Category"
                     tooltip={health.qbit.category ? 'Download category exists in qBittorrent' : 'Download category is missing in qBittorrent'}
                 />
-                <span className="text-sm text-muted-foreground">
-                    v{health.qbit.version ?? 'unknown'} · WebAPI {health.qbit.webapi ?? 'unknown'} · {health.driver} driver · {health.pollMode} mode
+                <span className="col-span-2 text-sm text-muted-foreground sm:col-span-1">
+                    {health.qbit.version ?? 'unknown version'} · WebAPI {health.qbit.webapi ?? 'unknown'} · {health.driver} driver ·{' '}
+                    {health.pollMode} mode
                 </span>
             </div>
 
@@ -119,7 +121,7 @@ export function HealthStrip({ health }: HealthStripProps) {
                 {notifications.enabled ? (
                     <>
                         <Badge variant="secondary">notifications: {notifications.topic}</Badge>
-                        <Button size="sm" variant="outline" disabled={sendingTest} onClick={sendTestNotification}>
+                        <Button size="sm" variant="outline" className="w-full sm:w-auto" disabled={sendingTest} onClick={sendTestNotification}>
                             {sendingTest ? 'Sending…' : 'Send test notification'}
                         </Button>
                     </>
@@ -128,7 +130,7 @@ export function HealthStrip({ health }: HealthStripProps) {
                 )}
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                 <div className="flex flex-col gap-1 text-sm text-muted-foreground">
                     {health.lastPoll ? (
                         <span>
@@ -145,7 +147,7 @@ export function HealthStrip({ health }: HealthStripProps) {
                     </span>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:flex sm:w-auto sm:gap-2">
                     <Button size="sm" variant="outline" disabled={polling} onClick={forcePoll}>
                         {polling ? 'Polling…' : 'Force poll'}
                     </Button>

@@ -7,15 +7,18 @@ import {
 } from "lucide-react"
 import { Toaster as Sonner } from "sonner"
 import { useAppearance } from "@/hooks/use-appearance"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 type ToasterProps = React.ComponentProps<typeof Sonner>
 
 const Toaster = ({ ...props }: ToasterProps) => {
   const { appearance } = useAppearance()
+  const isMobile = useIsMobile()
 
   return (
     <Sonner
       theme={appearance}
+      position={isMobile ? "top-center" : "bottom-right"}
       className="toaster group"
       icons={{
         success: <CircleCheck className="h-4 w-4" />,

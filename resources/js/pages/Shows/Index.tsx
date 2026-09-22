@@ -8,6 +8,7 @@ import { RelativeTime } from '@/components/subtracker/relative-time';
 import { RuleBadge } from '@/components/subtracker/rule-badge';
 import { SeasonLabel } from '@/components/subtracker/season-label';
 import { ShowCard } from '@/components/subtracker/show-card';
+import { ShowListRowMobile } from '@/components/subtracker/show-list-row-mobile';
 import { ShowsToolbar } from '@/components/subtracker/shows-toolbar';
 import { TrackSwitch } from '@/components/subtracker/track-switch';
 import { Button } from '@/components/ui/button';
@@ -30,6 +31,7 @@ const DELETABLE_RULE_STATES: RuleState[] = ['synced', 'disabled', 'error'];
 
 export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndexProps) {
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
+    const [selectionMode, setSelectionMode] = useState(false);
     const [view, setView] = useShowsView();
 
     const recentActivity = useRecentActivity();
@@ -38,6 +40,7 @@ export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndex
 
     useEffect(() => {
         setSelectedIds([]);
+        setSelectionMode(false);
     }, [filters.q, filters.tracked, filters.sort, filters.season, filters.year, shows.meta.current_page]);
 
     const pageIds = shows.data.map((show) => show.id);
@@ -68,18 +71,20 @@ export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndex
     const isFiltered = filters.q !== '' || filters.tracked !== 'all' || filters.season !== null || filters.year !== null;
     const isEmptyCatalog = shows.meta.total === 0 && !isFiltered;
     const isEmptyResults = shows.data.length === 0 && !isEmptyCatalog;
+    const bulkBarVisible = selectedIds.length > 0;
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Shows" />
-            <div className="flex h-full flex-1 flex-col gap-4 p-4">
+            <div className={`flex h-full flex-1 flex-col gap-4 p-3 sm:p-4 ${bulkBarVisible ? 'pb-24 sm:pb-4' : ''}`}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                    <ShowsToolbar filters={filters} years={filterOptions.years} />
+                    <ShowsToolbar filters={filters} years={filterOptions.years} view={view} onViewChange={setView} />
                     <ToggleGroup
                         type="single"
                         value={view}
                         onValueChange={(value) => value && setView(value as 'grid' | 'list')}
                         aria-label="Shows view"
+                        className="hidden sm:flex"
                     >
                         <ToggleGroupItem value="grid" aria-label="Grid view">
                             <LayoutGrid className="size-4" />
@@ -89,6 +94,24 @@ export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndex
                         </ToggleGroupItem>
                     </ToggleGroup>
                 </div>
+
+                {view === 'grid' && shows.data.length > 0 && (
+                    <div className="flex items-center justify-between gap-2 sm:hidden">
+                        <span className="text-sm text-muted-foreground">
+                            {shows.meta.total} show{shows.meta.total === 1 ? '' : 's'}
+                        </span>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                                setSelectionMode((mode) => !mode);
+                                setSelectedIds([]);
+                            }}
+                        >
+                            {selectionMode ? 'Done' : 'Select'}
+                        </Button>
+                    </div>
+                )}
 
                 <BulkBar shows={shows.data} selectedIds={selectedIds} onClear={() => setSelectedIds([])} />
 
@@ -111,135 +134,148 @@ export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndex
                 )}
 
                 {shows.data.length > 0 && view === 'grid' && (
-                    <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
+                    <div
+                        className="grid gap-3 sm:gap-4 [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))] sm:[grid-template-columns:repeat(auto-fill,minmax(180px,1fr))] lg:[grid-template-columns:repeat(auto-fill,minmax(200px,1fr))]"
+                    >
                         {shows.data.map((show) => (
                             <ShowCard
                                 key={show.id}
                                 show={show}
                                 selected={selectedIds.includes(show.id)}
                                 onToggleSelect={(checked) => toggleSelect(show.id, checked)}
+                                selectionMode={selectionMode}
                             />
                         ))}
                     </div>
                 )}
 
                 {shows.data.length > 0 && view === 'list' && (
-                    <div className="overflow-x-auto rounded-xl border">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-10">
-                                        <Checkbox
-                                            checked={allSelected}
-                                            onCheckedChange={(checked) => toggleSelectAll(checked === true)}
-                                            aria-label="Select all shows on this page"
-                                        />
-                                    </TableHead>
-                                    <TableHead className="w-20" />
-                                    <TableHead>Name</TableHead>
-                                    <TableHead>Latest</TableHead>
-                                    <TableHead>Last seen</TableHead>
-                                    <TableHead>Track</TableHead>
-                                    <TableHead>Rule</TableHead>
-                                    <TableHead className="w-20" />
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {shows.data.map((show) => (
-                                    <TableRow key={show.id}>
-                                        <TableCell>
+                    <>
+                        <div className="rounded-xl border md:hidden">
+                            {shows.data.map((show) => (
+                                <ShowListRowMobile key={show.id} show={show} />
+                            ))}
+                        </div>
+
+                        <div className="hidden overflow-x-auto rounded-xl border md:block">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead className="w-10">
                                             <Checkbox
-                                                checked={selectedIds.includes(show.id)}
-                                                onCheckedChange={(checked) => toggleSelect(show.id, checked === true)}
-                                                aria-label={`Select ${show.name}`}
+                                                checked={allSelected}
+                                                onCheckedChange={(checked) => toggleSelectAll(checked === true)}
+                                                aria-label="Select all shows on this page"
                                             />
-                                        </TableCell>
-                                        <TableCell>
-                                            <PosterHoverPreview
-                                                imageUrl={show.imageUrl}
-                                                imageStatus={show.imageStatus}
-                                                imageWidth={show.imageWidth}
-                                                imageHeight={show.imageHeight}
-                                                name={show.name}
-                                            />
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex flex-col gap-0.5">
-                                                <div className="flex items-center gap-1.5">
-                                                    <Link href={`/shows/${show.id}`} className="font-medium hover:underline">
-                                                        {show.name}
-                                                    </Link>
-                                                    {show.hasBatch && !show.isTracked && <BatchHint />}
-                                                </div>
-                                                <SeasonLabel
-                                                    season={show.season}
-                                                    seasonYear={show.seasonYear}
-                                                    premiereSource={show.premiereSource}
-                                                    className="text-xs text-muted-foreground"
+                                        </TableHead>
+                                        <TableHead className="w-20" />
+                                        <TableHead>Name</TableHead>
+                                        <TableHead>Latest</TableHead>
+                                        <TableHead>Last seen</TableHead>
+                                        <TableHead>Track</TableHead>
+                                        <TableHead>Rule</TableHead>
+                                        <TableHead className="w-20" />
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {shows.data.map((show) => (
+                                        <TableRow key={show.id}>
+                                            <TableCell>
+                                                <Checkbox
+                                                    checked={selectedIds.includes(show.id)}
+                                                    onCheckedChange={(checked) => toggleSelect(show.id, checked === true)}
+                                                    aria-label={`Select ${show.name}`}
                                                 />
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <LatestEpisodeLabel latest={show.latest} />
-                                        </TableCell>
-                                        <TableCell>
-                                            <RelativeTime iso={show.lastSeenAt} />
-                                        </TableCell>
-                                        <TableCell>
-                                            <TrackSwitch
-                                                showId={show.id}
-                                                showName={show.name}
-                                                tracked={show.isTracked}
-                                                downloadableCount={show.downloadableCount}
-                                                hasBatch={show.hasBatch}
-                                            />
-                                        </TableCell>
-                                        <TableCell>
-                                            <RuleBadge trackingMode={show.trackingMode} state={show.ruleState} error={show.ruleError} />
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex items-center gap-1">
-                                                <MatchesDialog
+                                            </TableCell>
+                                            <TableCell>
+                                                <PosterHoverPreview
+                                                    imageUrl={show.imageUrl}
+                                                    imageStatus={show.imageStatus}
+                                                    imageWidth={show.imageWidth}
+                                                    imageHeight={show.imageHeight}
+                                                    name={show.name}
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex flex-col gap-0.5">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <Link href={`/shows/${show.id}`} className="font-medium hover:underline">
+                                                            {show.name}
+                                                        </Link>
+                                                        {show.hasBatch && !show.isTracked && <BatchHint />}
+                                                    </div>
+                                                    <SeasonLabel
+                                                        season={show.season}
+                                                        seasonYear={show.seasonYear}
+                                                        premiereSource={show.premiereSource}
+                                                        className="text-xs text-muted-foreground"
+                                                    />
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <LatestEpisodeLabel latest={show.latest} />
+                                            </TableCell>
+                                            <TableCell>
+                                                <RelativeTime iso={show.lastSeenAt} />
+                                            </TableCell>
+                                            <TableCell>
+                                                <TrackSwitch
                                                     showId={show.id}
                                                     showName={show.name}
-                                                    trigger={
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="size-8"
-                                                            aria-label={`Preview matches for ${show.name}`}
-                                                        >
-                                                            <Eye className="size-4" />
-                                                        </Button>
-                                                    }
+                                                    tracked={show.isTracked}
+                                                    downloadableCount={show.downloadableCount}
+                                                    hasBatch={show.hasBatch}
                                                 />
-                                                {DELETABLE_RULE_STATES.includes(show.ruleState) && (
-                                                    <DeleteRuleDialog
+                                            </TableCell>
+                                            <TableCell>
+                                                <RuleBadge trackingMode={show.trackingMode} state={show.ruleState} error={show.ruleError} />
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex items-center gap-1">
+                                                    <MatchesDialog
                                                         showId={show.id}
                                                         showName={show.name}
                                                         trigger={
                                                             <Button
                                                                 variant="ghost"
                                                                 size="icon"
-                                                                className="size-8 text-destructive hover:text-destructive"
-                                                                aria-label={`Delete rule for ${show.name}`}
+                                                                className="size-8"
+                                                                aria-label={`Preview matches for ${show.name}`}
                                                             >
-                                                                <Trash2 className="size-4" />
+                                                                <Eye className="size-4" />
                                                             </Button>
                                                         }
                                                     />
-                                                )}
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </div>
+                                                    {DELETABLE_RULE_STATES.includes(show.ruleState) && (
+                                                        <DeleteRuleDialog
+                                                            showId={show.id}
+                                                            showName={show.name}
+                                                            trigger={
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="size-8 text-destructive hover:text-destructive"
+                                                                    aria-label={`Delete rule for ${show.name}`}
+                                                                >
+                                                                    <Trash2 className="size-4" />
+                                                                </Button>
+                                                            }
+                                                        />
+                                                    )}
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </>
                 )}
 
                 {shows.data.length > 0 && (
-                    <div className="sticky bottom-0 -mx-4 mt-auto border-t bg-background/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+                    <div
+                        className={`sticky z-30 -mx-3 border-t bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:-mx-4 sm:bottom-0 sm:px-4 ${bulkBarVisible ? 'bottom-16' : 'bottom-0'}`}
+                    >
                         <Pagination>
                             <PaginationContent>
                                 {shows.meta.links.map((link, index) => (

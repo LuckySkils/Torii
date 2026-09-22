@@ -1,13 +1,16 @@
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { PackageOpen } from 'lucide-react';
+import { TapInfo } from './tap-info';
 
 export function BatchHint() {
     return (
-        <Tooltip>
-            <TooltipTrigger asChild>
-                <PackageOpen className="inline size-4 text-muted-foreground" aria-label="Batch release available" />
-            </TooltipTrigger>
-            <TooltipContent>A batch release is available for this show.</TooltipContent>
-        </Tooltip>
+        <TapInfo
+            trigger={
+                <button type="button" className="inline-flex cursor-pointer bg-transparent p-0" aria-label="Batch release available">
+                    <PackageOpen className="size-4 text-muted-foreground" />
+                </button>
+            }
+        >
+            A batch release is available for this show.
+        </TapInfo>
     );
 }

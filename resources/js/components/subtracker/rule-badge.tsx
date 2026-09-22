@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { type RuleState, type TrackingMode } from '@/types/subtracker';
 import { Loader2 } from 'lucide-react';
+import { TapInfo } from './tap-info';
 
 interface RuleBadgeProps {
     trackingMode: TrackingMode | null;
@@ -12,12 +12,9 @@ interface RuleBadgeProps {
 export function RuleBadge({ trackingMode, state, error }: RuleBadgeProps) {
     if (trackingMode === 'batch') {
         return (
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <Badge className="border-transparent bg-blue-600 text-white hover:bg-blue-600/90">batch</Badge>
-                </TooltipTrigger>
-                <TooltipContent>Downloaded as a batch; no RSS rule</TooltipContent>
-            </Tooltip>
+            <TapInfo trigger={<Badge className="cursor-pointer border-transparent bg-blue-600 text-white hover:bg-blue-600/90">batch</Badge>}>
+                Downloaded as a batch; no RSS rule
+            </TapInfo>
         );
     }
 
@@ -43,11 +40,8 @@ export function RuleBadge({ trackingMode, state, error }: RuleBadgeProps) {
     }
 
     return (
-        <Tooltip>
-            <TooltipTrigger asChild>
-                <Badge variant="destructive">error</Badge>
-            </TooltipTrigger>
-            <TooltipContent>{error ?? 'Unknown error'}</TooltipContent>
-        </Tooltip>
+        <TapInfo trigger={<Badge variant="destructive" className="cursor-pointer">error</Badge>}>
+            {error ?? 'Unknown error'}
+        </TapInfo>
     );
 }

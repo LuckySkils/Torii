@@ -48,17 +48,28 @@ export function BulkBar({ shows, selectedIds, onClear }: BulkBarProps) {
     }
 
     return (
-        <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/50 px-3 py-2">
+        <div
+            className={
+                'fixed inset-x-0 bottom-0 z-40 flex flex-col gap-2 border-t bg-background p-3 shadow-lg ' +
+                'pb-[calc(0.75rem+env(safe-area-inset-bottom))] ' +
+                'sm:static sm:inset-auto sm:z-auto sm:flex-row sm:flex-wrap sm:items-center sm:rounded-md sm:border sm:bg-muted/50 sm:px-3 sm:py-2 sm:pb-2 sm:shadow-none'
+            }
+        >
             <span className="text-sm">{selectedIds.length} selected</span>
-            <Button size="sm" disabled={pending !== null} onClick={handleTrackClick}>
-                Track selected
-            </Button>
-            <Button size="sm" variant="outline" disabled={pending !== null} onClick={() => commit(false)}>
-                Untrack selected
-            </Button>
-            <Button size="sm" variant="ghost" onClick={onClear}>
-                Clear selection
-            </Button>
+            <div className="grid grid-cols-3 gap-2 sm:contents">
+                <Button disabled={pending !== null} onClick={handleTrackClick} className="sm:h-9 sm:px-3 sm:text-sm">
+                    <span className="sm:hidden">Track</span>
+                    <span className="hidden sm:inline">Track selected</span>
+                </Button>
+                <Button variant="outline" disabled={pending !== null} onClick={() => commit(false)} className="sm:h-9 sm:px-3 sm:text-sm">
+                    <span className="sm:hidden">Untrack</span>
+                    <span className="hidden sm:inline">Untrack selected</span>
+                </Button>
+                <Button variant="ghost" onClick={onClear} className="sm:h-9 sm:px-3 sm:text-sm">
+                    <span className="sm:hidden">Cancel</span>
+                    <span className="hidden sm:inline">Clear selection</span>
+                </Button>
+            </div>
             <TrackConfirmDialog
                 open={confirmOpen}
                 onOpenChange={setConfirmOpen}

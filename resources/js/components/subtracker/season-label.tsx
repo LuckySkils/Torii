@@ -1,5 +1,6 @@
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 import { type PremiereSource, type Season } from '@/types/subtracker';
+import { TapInfo } from './tap-info';
 
 const SEASON_LABEL: Record<Season, string> = {
     winter: 'Winter',
@@ -27,11 +28,8 @@ export function SeasonLabel({ season, seasonYear, premiereSource, className }: S
     }
 
     return (
-        <Tooltip>
-            <TooltipTrigger asChild>
-                <span className={className}>{text} (approx.)</span>
-            </TooltipTrigger>
-            <TooltipContent>Premiere date estimated from when Torii first saw this show</TooltipContent>
-        </Tooltip>
+        <TapInfo trigger={<button type="button" className={cn('cursor-pointer bg-transparent p-0 text-left font-inherit', className)}>{text} (approx.)</button>}>
+            Premiere date estimated from when Torii first saw this show
+        </TapInfo>
     );
 }
