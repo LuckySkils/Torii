@@ -1,9 +1,11 @@
-# Torii: put this file and .env into your OMV compose folder and start it.
-# Only .env needs editing. Replace "your-github-username" below once.
+# Torii: SubsPlease show tracker for qBittorrent
+# Usage: put this file and .env (from .env.example) in one folder, then `docker compose up -d`.
+# Every setting from .env must also be listed under `environment:` below to reach the container.
 
 services:
   torii:
-    image: ghcr.io/your-github-username/torii:latest
+    # "latest" follows the main branch. To pin a build, use e.g. :sha-3e63969
+    image: ghcr.io/luckyskils/torii:latest
     restart: unless-stopped
     ports:
       - "${TORII_PORT:-8080}:80"
@@ -14,8 +16,13 @@ services:
       QBIT_CATEGORY: ${QBIT_CATEGORY:-anime}
       APP_URL: ${APP_URL:-http://localhost:8080}
       DB_PASSWORD: ${DB_PASSWORD:-torii}
+      # Notifications: empty NTFY_URL = off
+      NTFY_URL: ${NTFY_URL:-}
+      NTFY_TOPIC: ${NTFY_TOPIC:-torii}
+      NTFY_TOKEN: ${NTFY_TOKEN:-}
+      NOTIFY_CLICK_URL: ${NOTIFY_CLICK_URL:-}
     volumes:
-      - ./data/app:/data
+      - ${TORII_DATA_DIR:-./data}/app:/data
     depends_on:
       db:
         condition: service_healthy
@@ -28,9 +35,29 @@ services:
       POSTGRES_USER: torii
       POSTGRES_PASSWORD: ${DB_PASSWORD:-torii}
     volumes:
-      - ./data/postgres:/var/lib/postgresql/data
+      - ${TORII_DATA_DIR:-./data}/postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U torii -d torii"]
       interval: 5s
       timeout: 5s
       retries: 20
+
+  # Optional self-hosted ntfy server. Starts only with COMPOSE_PROFILES=notifications.
+  ntfy:
+    image: binwiederhier/ntfy:v2
+    profiles: ["notifications"]
+    command: serve
+    restart: unless-stopped
+    ports:
+      - "${NTFY_PORT:-8081}:80"
+    environment:
+      NTFY_BASE_URL: ${NTFY_BASE_URL:-http://localhost:8081}
+      NTFY_CACHE_FILE: /var/cache/ntfy/cache.db
+      NTFY_AUTH_FILE: /var/lib/ntfy/user.db
+      NTFY_AUTH_DEFAULT_ACCESS: deny-all
+      NTFY_BEHIND_PROXY: "true"
+      # Needed for instant push to the iOS app
+      NTFY_UPSTREAM_BASE_URL: https://ntfy.sh
+    volumes:
+      - ${TORII_DATA_DIR:-./data}/ntfy/cache:/var/cache/ntfy
+      - ${TORII_DATA_DIR:-./data}/ntfy/lib:/var/lib/ntfy
