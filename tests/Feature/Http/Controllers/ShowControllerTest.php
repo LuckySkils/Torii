@@ -200,6 +200,39 @@ test('index filters by season and year, sorts by premiered date newest-first wit
     expect($noPremiere)->not->toBeNull();
 });
 
+test('index exposes downloaded count, and the show page exposes downloadedAt per release', function () {
+    $show = makeIndexableShow('Grand Blue S3', true, '2026-09-20 00:00:00');
+
+    Release::create([
+        'show_id' => $show->id,
+        'guid' => 'GUID-DL-1',
+        'title' => 'downloaded ep',
+        'episode' => '01',
+        'is_batch' => false,
+        'resolution' => '1080p',
+        'link' => 'magnet:?xt=urn:btih:AAAA',
+        'published_at' => '2026-09-19 00:00:00',
+        'first_seen_at' => '2026-09-19 00:05:00',
+        'downloaded_at' => '2026-09-19 01:00:00',
+    ]);
+    Release::create([
+        'show_id' => $show->id,
+        'guid' => 'GUID-DL-2',
+        'title' => 'not downloaded ep',
+        'episode' => '02',
+        'is_batch' => false,
+        'resolution' => '1080p',
+        'link' => 'magnet:?xt=urn:btih:BBBB',
+        'published_at' => '2026-09-20 00:00:00',
+        'first_seen_at' => '2026-09-20 00:05:00',
+    ]);
+
+    $this->get('/shows')->assertInertia(fn ($page) => $page->where('shows.data.0.downloadedCount', 1));
+
+    $this->get("/shows/{$show->id}")->assertInertia(fn ($page) => $page->where('releases.0.downloadedAt', null)
+        ->where('releases.1.downloadedAt', '2026-09-19T01:00:00+00:00'));
+});
+
 test('show renders the show and all of its releases newest first', function () {
     $show = makeIndexableShow('Grand Blue S3', false, '2026-09-20 00:00:00');
 

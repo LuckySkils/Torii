@@ -33,6 +33,7 @@ final class ReleaseResource extends JsonResource
             'dispatchStatus' => $this->dispatch_status?->value,
             'dispatchedAt' => $this->dispatched_at?->toIso8601String(),
             'dispatchError' => $this->dispatch_error,
+            'downloadedAt' => $this->downloaded_at?->toIso8601String(),
         ];
     }
 }

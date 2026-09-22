@@ -155,7 +155,7 @@ export default function ShowShow({ show, releases }: ShowShowProps) {
 
                         <p className="text-sm text-muted-foreground">
                             First seen: <RelativeTime iso={show.firstSeenAt} /> · Last seen: <RelativeTime iso={show.lastSeenAt} /> ·{' '}
-                            {show.queuedCount} release{show.queuedCount === 1 ? '' : 's'} queued
+                            {show.queuedCount} release{show.queuedCount === 1 ? '' : 's'} queued · {show.downloadedCount} downloaded
                         </p>
                     </div>
                 </div>

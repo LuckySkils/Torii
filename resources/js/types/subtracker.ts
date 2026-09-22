@@ -61,6 +61,7 @@ export interface ReleaseSummary {
     dispatchStatus: DispatchStatus | null;
     dispatchedAt: string | null;
     dispatchError: string | null;
+    downloadedAt: string | null;
 }
 
 export interface DashboardProps {
@@ -96,6 +97,7 @@ export interface ShowSummary {
     hasBatch: boolean;
     queuedCount: number;
     downloadableCount: number;
+    downloadedCount: number;
     imageUrl: string | null;
     imageStatus: ImageStatus;
     imageCheckedAt: string | null;

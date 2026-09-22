@@ -113,6 +113,14 @@ final class QBittorrentClient
         return $this->request('get', '/api/v2/torrents/info', ['hashes' => implode('|', $hashes)])->json();
     }
 
+    public function getCompletedTorrents(string $category): array
+    {
+        return $this->request('get', '/api/v2/torrents/info', [
+            'category' => $category,
+            'filter' => 'completed',
+        ])->json();
+    }
+
     public function addTorrent(string $url, string $category, string $tags): void
     {
         $this->request('post', '/api/v2/torrents/add', [

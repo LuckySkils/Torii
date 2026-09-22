@@ -47,6 +47,10 @@ class HandleInertiaRequests extends Middleware
                 'error' => $request->session()->get('error'),
             ],
             'driver' => config('subtracker.qbittorrent.mode'),
+            'notifications' => [
+                'enabled' => (bool) config('subtracker.notifications.enabled'),
+                'topic' => config('subtracker.notifications.enabled') ? config('subtracker.notifications.ntfy_topic') : null,
+            ],
         ]);
     }
 }

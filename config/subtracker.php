@@ -22,4 +22,15 @@ return [
         'tag' => env('QBIT_TAG', 'subtracker'),
     ],
 
+    'notifications' => [
+        'enabled' => env('NTFY_URL', '') !== '' && env('NTFY_TOPIC', 'torii') !== '',
+        'ntfy_url' => env('NTFY_URL', ''),
+        'ntfy_topic' => env('NTFY_TOPIC', 'torii'),
+        'ntfy_token' => env('NTFY_TOKEN', ''),
+        'notify_new_episode' => (bool) env('NOTIFY_NEW_EPISODE', true),
+        'notify_downloaded' => (bool) env('NOTIFY_DOWNLOADED', true),
+        'notify_repacks' => (bool) env('NOTIFY_REPACKS', false),
+        'click_url' => env('NOTIFY_CLICK_URL', ''),
+    ],
+
 ];

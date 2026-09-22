@@ -2,14 +2,30 @@ import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatRelative } from '@/lib/dates';
 import { type DispatchStatus } from '@/types/subtracker';
+import { CheckCircle2 } from 'lucide-react';
 
 interface DispatchBadgeProps {
     status: DispatchStatus | null;
     dispatchedAt: string | null;
     error: string | null;
+    downloadedAt?: string | null;
 }
 
-export function DispatchBadge({ status, dispatchedAt, error }: DispatchBadgeProps) {
+export function DispatchBadge({ status, dispatchedAt, error, downloadedAt = null }: DispatchBadgeProps) {
+    if (downloadedAt !== null) {
+        return (
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-500">
+                        <CheckCircle2 className="size-4" />
+                        <span className="text-sm">downloaded</span>
+                    </span>
+                </TooltipTrigger>
+                <TooltipContent>Downloaded {formatRelative(downloadedAt)}</TooltipContent>
+            </Tooltip>
+        );
+    }
+
     if (status === null) {
         return <span className="text-sm text-muted-foreground">—</span>;
     }

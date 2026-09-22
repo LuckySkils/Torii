@@ -1,8 +1,9 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { type SharedData } from '@/types';
 import { type Health } from '@/types/subtracker';
-import { router } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import { RelativeTime } from './relative-time';
 
@@ -27,9 +28,11 @@ function HealthBadge({ ok, label, tooltip }: { ok: boolean; label: string; toolt
 }
 
 export function HealthStrip({ health }: HealthStripProps) {
+    const { notifications } = usePage<SharedData>().props;
     const [polling, setPolling] = useState(false);
     const [reconciling, setReconciling] = useState(false);
     const [fetchingImages, setFetchingImages] = useState(false);
+    const [sendingTest, setSendingTest] = useState(false);
 
     function forcePoll() {
         setPolling(true);
@@ -67,6 +70,18 @@ export function HealthStrip({ health }: HealthStripProps) {
         );
     }
 
+    function sendTestNotification() {
+        setSendingTest(true);
+        router.post(
+            '/notifications/test',
+            {},
+            {
+                preserveScroll: true,
+                onFinish: () => setSendingTest(false),
+            },
+        );
+    }
+
     return (
         <section className="flex flex-col gap-3 rounded-xl border p-4">
             <div className="flex flex-wrap items-center gap-2">
@@ -98,6 +113,19 @@ export function HealthStrip({ health }: HealthStripProps) {
                 <span className="text-sm text-muted-foreground">
                     v{health.qbit.version ?? 'unknown'} · WebAPI {health.qbit.webapi ?? 'unknown'} · {health.driver} driver · {health.pollMode} mode
                 </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+                {notifications.enabled ? (
+                    <>
+                        <Badge variant="secondary">notifications: {notifications.topic}</Badge>
+                        <Button size="sm" variant="outline" disabled={sendingTest} onClick={sendTestNotification}>
+                            {sendingTest ? 'Sending…' : 'Send test notification'}
+                        </Button>
+                    </>
+                ) : (
+                    <span className="text-sm text-muted-foreground">notifications off</span>
+                )}
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3">

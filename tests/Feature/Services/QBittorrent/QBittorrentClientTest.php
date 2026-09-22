@@ -159,6 +159,24 @@ test('addTorrent sends the category and tags but never savepath, paused or stopp
     });
 });
 
+test('getCompletedTorrents sends the category and completed filter', function () {
+    configureQbit();
+    Http::fake([
+        'http://qbit.test:8080/api/v2/auth/login' => Http::response('Ok.', 200, ['Set-Cookie' => 'SID=abc123; path=/']),
+        'http://qbit.test:8080/api/v2/torrents/info*' => Http::response(json_encode([
+            ['hash' => 'aaaa', 'completion_on' => 1700000000],
+        ]), 200),
+    ]);
+
+    $info = (new QBittorrentClient)->getCompletedTorrents('Anime');
+
+    expect($info)->toBe([['hash' => 'aaaa', 'completion_on' => 1700000000]]);
+
+    Http::assertSent(fn ($request) => str_contains($request->url(), 'torrents/info')
+        && $request['category'] === 'Anime'
+        && $request['filter'] === 'completed');
+});
+
 test('addTorrent throws when qbit responds Fails.', function () {
     configureQbit();
     Http::fake([

@@ -33,3 +33,20 @@ test('reflects the configured driver mode', function () {
 
     $this->get('/')->assertInertia(fn ($page) => $page->where('driver', 'push'));
 });
+
+test('shares notifications as disabled with a null topic by default', function () {
+    config(['subtracker.notifications.enabled' => false]);
+
+    $this->get('/')->assertInertia(fn ($page) => $page->where('notifications.enabled', false)
+        ->where('notifications.topic', null));
+});
+
+test('shares the topic when notifications are enabled', function () {
+    config([
+        'subtracker.notifications.enabled' => true,
+        'subtracker.notifications.ntfy_topic' => 'my-topic',
+    ]);
+
+    $this->get('/')->assertInertia(fn ($page) => $page->where('notifications.enabled', true)
+        ->where('notifications.topic', 'my-topic'));
+});

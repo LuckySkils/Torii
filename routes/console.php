@@ -10,3 +10,4 @@ Artisan::command('inspire', function () {
 
 Schedule::command('feed:poll')->everyMinute()->withoutOverlapping();
 Schedule::command('qbit:reconcile')->hourly();
+Schedule::command('qbit:check-completed')->everyMinute()->withoutOverlapping();

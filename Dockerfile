@@ -61,7 +61,13 @@ ENV APP_NAME=Torii \
     QBIT_FEED_PATH="SubsPlease 1080p" \
     QBIT_CATEGORY=anime \
     QBIT_RULE_PREFIX="[ST] " \
-    QBIT_TAG=subtracker
+    QBIT_TAG=subtracker \
+    NTFY_URL="" \
+    NTFY_TOPIC=torii \
+    NTFY_TOKEN="" \
+    NOTIFY_NEW_EPISODE=true \
+    NOTIFY_DOWNLOADED=true \
+    NOTIFY_REPACKS=false
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 COPY composer.json composer.lock ./

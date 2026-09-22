@@ -29,6 +29,7 @@ class Release extends Model
         'dispatched_at',
         'dispatch_error',
         'dispatch_status',
+        'downloaded_at',
     ];
 
     protected function casts(): array
@@ -42,6 +43,7 @@ class Release extends Model
             'first_seen_at' => 'datetime',
             'dispatched_at' => 'datetime',
             'dispatch_status' => DispatchStatus::class,
+            'downloaded_at' => 'datetime',
         ];
     }
 

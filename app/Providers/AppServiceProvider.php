@@ -3,6 +3,9 @@
 namespace App\Providers;
 
 use App\Contracts\DownloadDriver;
+use App\Contracts\Notifier;
+use App\Services\Notifications\NtfyNotifier;
+use App\Services\Notifications\NullNotifier;
 use App\Services\QBittorrent\RulesDriver;
 use Illuminate\Support\ServiceProvider;
 
@@ -20,6 +23,12 @@ class AppServiceProvider extends ServiceProvider
                     'Unsupported QBIT_MODE ['.config('subtracker.qbittorrent.mode').'].',
                 ),
             };
+        });
+
+        $this->app->bind(Notifier::class, function () {
+            return config('subtracker.notifications.enabled')
+                ? $this->app->make(NtfyNotifier::class)
+                : $this->app->make(NullNotifier::class);
         });
     }
 

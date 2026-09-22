@@ -94,11 +94,16 @@ export function ReleasesTable({ releases, showColumn = false, versionColumn = fa
                             </TableCell>
                             <TableCell>{formatDelay(release.publishedAt, release.firstSeenAt)}</TableCell>
                             <TableCell>
-                                <DispatchBadge status={release.dispatchStatus} dispatchedAt={release.dispatchedAt} error={release.dispatchError} />
+                                <DispatchBadge
+                                    status={release.dispatchStatus}
+                                    dispatchedAt={release.dispatchedAt}
+                                    error={release.dispatchError}
+                                    downloadedAt={release.downloadedAt}
+                                />
                             </TableCell>
                             <TableCell>
                                 <div className="flex items-center gap-1">
-                                    {release.dispatchStatus !== 'sent' && release.dispatchStatus !== 'exists' && (
+                                    {release.downloadedAt === null && release.dispatchStatus !== 'sent' && release.dispatchStatus !== 'exists' && (
                                         <DownloadButton releaseId={release.id} title={release.title} retry={release.dispatchStatus === 'error'} />
                                     )}
                                     <CopyLinkButton link={release.link} label={`Copy link for ${release.title}`} />

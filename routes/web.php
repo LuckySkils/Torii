@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ImageController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ReleaseController;
 use App\Http\Controllers\ShowController;
 use App\Http\Controllers\ShowTrackingController;
@@ -27,3 +28,5 @@ Route::post('images/refresh-missing', [ImageController::class, 'refreshMissing']
 
 Route::post('feed/poll', [SystemController::class, 'pollFeed'])->name('feed.poll');
 Route::post('qbit/reconcile', [SystemController::class, 'reconcile'])->name('qbit.reconcile');
+
+Route::post('notifications/test', [NotificationController::class, 'test'])->name('notifications.test');

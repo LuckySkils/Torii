@@ -22,5 +22,6 @@ export interface SharedData {
     quote: { message: string; author: string };
     flash: { success: string | null; error: string | null };
     driver: 'rules' | 'push';
+    notifications: { enabled: boolean; topic: string | null };
     [key: string]: unknown;
 }
