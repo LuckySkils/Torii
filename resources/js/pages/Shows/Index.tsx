@@ -239,30 +239,32 @@ export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndex
                 )}
 
                 {shows.data.length > 0 && (
-                    <Pagination>
-                        <PaginationContent>
-                            {shows.meta.links.map((link, index) => (
-                                <PaginationItem key={index}>
-                                    {link.url === null ? (
-                                        <span
-                                            className="flex h-9 min-w-9 items-center justify-center px-3 text-sm text-muted-foreground opacity-50"
-                                            dangerouslySetInnerHTML={{ __html: link.label }}
-                                        />
-                                    ) : (
-                                        <PaginationLink
-                                            href={link.url}
-                                            isActive={link.active}
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                goTo(link.url);
-                                            }}
-                                            dangerouslySetInnerHTML={{ __html: link.label }}
-                                        />
-                                    )}
-                                </PaginationItem>
-                            ))}
-                        </PaginationContent>
-                    </Pagination>
+                    <div className="sticky bottom-0 -mx-4 mt-auto border-t bg-background/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+                        <Pagination>
+                            <PaginationContent>
+                                {shows.meta.links.map((link, index) => (
+                                    <PaginationItem key={index}>
+                                        {link.url === null ? (
+                                            <span
+                                                className="flex h-9 min-w-9 items-center justify-center px-3 text-sm text-muted-foreground opacity-50"
+                                                dangerouslySetInnerHTML={{ __html: link.label }}
+                                            />
+                                        ) : (
+                                            <PaginationLink
+                                                href={link.url}
+                                                isActive={link.active}
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    goTo(link.url);
+                                                }}
+                                                dangerouslySetInnerHTML={{ __html: link.label }}
+                                            />
+                                        )}
+                                    </PaginationItem>
+                                ))}
+                            </PaginationContent>
+                        </Pagination>
+                    </div>
                 )}
             </div>
         </AppLayout>
