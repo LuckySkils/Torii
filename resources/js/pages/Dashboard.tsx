@@ -1,15 +1,18 @@
 import { HealthStrip } from '@/components/subtracker/health-strip';
+import { LatestReleasesTable, ReleaseEpisode, ReleaseThumb } from '@/components/subtracker/latest-releases-table';
+import { FirstEpisodeBadge, isPremiere, NewShowBadge } from '@/components/subtracker/novelty-badges';
 import { ReleaseCard } from '@/components/subtracker/release-card';
-import { ReleasesTable } from '@/components/subtracker/releases-table';
+import { useAdaptivePoll } from '@/hooks/use-adaptive-poll';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { type DashboardProps } from '@/types/subtracker';
-import { Head, usePoll } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Dashboard', href: '/' }];
 
 export default function Dashboard({ health, latestReleases }: DashboardProps) {
-    usePoll(30000, { only: ['health', 'latestReleases'] });
+    const anyPosterPending = latestReleases.some((release) => release.show?.imageStatus === 'pending');
+    useAdaptivePoll(anyPosterPending ? 5000 : 30000, ['health', 'latestReleases']);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -26,11 +29,25 @@ export default function Dashboard({ health, latestReleases }: DashboardProps) {
                         <>
                             <div className="flex flex-col gap-2 md:hidden">
                                 {latestReleases.map((release) => (
-                                    <ReleaseCard key={release.id} release={release} showLink />
+                                    <ReleaseCard
+                                        key={release.id}
+                                        release={release}
+                                        showLink
+                                        poster={<ReleaseThumb release={release} className="w-24" />}
+                                        episode={<ReleaseEpisode release={release} />}
+                                        badges={
+                                            release.isNewShow || isPremiere(release) ? (
+                                                <>
+                                                    {release.isNewShow && <NewShowBadge />}
+                                                    {isPremiere(release) && <FirstEpisodeBadge />}
+                                                </>
+                                            ) : undefined
+                                        }
+                                    />
                                 ))}
                             </div>
                             <div className="hidden md:block">
-                                <ReleasesTable releases={latestReleases} showColumn emptyMessage="No releases yet." />
+                                <LatestReleasesTable releases={latestReleases} />
                             </div>
                         </>
                     )}

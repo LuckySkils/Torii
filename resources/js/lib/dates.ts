@@ -57,7 +57,40 @@ export function formatDuration(ms: number): string {
     return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`;
 }
 
-/** Polling delay: first seen minus published. */
+const MAX_PLAUSIBLE_DELAY_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Polling delay: first seen minus published. "—" when negative or over 7 days,
+ * which only happens with bad timestamps (e.g. the first poll's backlog or a
+ * wrong pubDate offset), never as a real delay.
+ */
 export function formatDelay(publishedAt: string, firstSeenAt: string): string {
-    return formatDuration(new Date(firstSeenAt).getTime() - new Date(publishedAt).getTime());
+    const ms = new Date(firstSeenAt).getTime() - new Date(publishedAt).getTime();
+
+    if (!Number.isFinite(ms) || ms < 0 || ms > MAX_PLAUSIBLE_DELAY_MS) {
+        return '—';
+    }
+
+    return formatDuration(ms);
+}
+
+/** Compact lag for the health strip, e.g. "45s", "4m", "1h 5m". Keeps the sign. */
+export function formatLag(seconds: number): string {
+    const sign = seconds < 0 ? '−' : '';
+    const abs = Math.abs(Math.round(seconds));
+
+    if (abs < 60) {
+        return `${sign}${abs}s`;
+    }
+
+    const minutes = Math.round(abs / 60);
+
+    if (minutes < 60) {
+        return `${sign}${minutes}m`;
+    }
+
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+
+    return `${sign}${hours}h${rest > 0 ? ` ${rest}m` : ''}`;
 }

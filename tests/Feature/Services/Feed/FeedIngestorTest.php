@@ -9,6 +9,7 @@ use App\Models\Release;
 use App\Models\Show;
 use App\Services\Feed\FeedIngestor;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function () {
@@ -38,6 +39,46 @@ function sampleItem(
 
     return "<item><title>{$title}</title><link>{$link}</link><guid isPermaLink=\"false\">{$guid}</guid><pubDate>{$pubDate}</pubDate><category>{$category}</category><subsplease:size>{$size}</subsplease:size></item>";
 }
+
+test('stores the raw pubDate and a published_at corrected to true UTC, for a real fixture item', function () {
+    $this->travelTo('2026-09-22 00:00:00');
+
+    (new FeedIngestor)->ingest(file_get_contents(dirname(__DIR__, 3).'/Fixtures/subsplease_1080.xml'));
+
+    $release = Release::where('title', 'like', '[SubsPlease] World Is Dancing - 13 (1080p)%')->sole();
+
+    // SubsPlease's own API reports this release at 13:33:36 UTC; the feed says 06:33:36 "+0000".
+    expect($release->published_at_raw)->toBe('Mon, 21 Sep 2026 06:33:36 +0000')
+        ->and($release->published_at->toIso8601String())->toBe('2026-09-21T13:33:36+00:00');
+});
+
+test('keeps the literal pubDate, with a warning, when the correction would be later than first_seen_at', function () {
+    $this->travelTo('2026-09-21 10:00:00');
+    Log::spy();
+
+    (new FeedIngestor)->ingest(sampleFeedXml([
+        sampleItem('[SubsPlease] Test Show - 01 (1080p) [ABCD1234].mkv', 'GUID-SAFE', 'Test Show - 1080', pubDate: 'Mon, 21 Sep 2026 08:32:00 +0000'),
+    ]));
+
+    $release = Release::where('guid', 'GUID-SAFE')->sole();
+
+    // Corrected would be 15:32, after first_seen_at (10:00), so the literal 08:32 is kept.
+    expect($release->published_at->toIso8601String())->toBe('2026-09-21T08:32:00+00:00')
+        ->and($release->published_at_raw)->toBe('Mon, 21 Sep 2026 08:32:00 +0000');
+    Log::shouldHaveReceived('warning')->withArgs(fn (string $message, array $context) => str_contains($message, 'later than first_seen_at')
+        && $context['release'] === '[SubsPlease] Test Show - 01 (1080p) [ABCD1234].mkv');
+});
+
+test('an offset of 0 stores the pubDate unchanged', function () {
+    config(['subtracker.feed.pubdate_offset_minutes' => 0]);
+    $this->travelTo('2026-09-22 00:00:00');
+
+    (new FeedIngestor)->ingest(sampleFeedXml([
+        sampleItem('[SubsPlease] Test Show - 01 (1080p) [ABCD1234].mkv', 'GUID-ZERO', 'Test Show - 1080', pubDate: 'Mon, 21 Sep 2026 08:32:00 +0000'),
+    ]));
+
+    expect(Release::where('guid', 'GUID-ZERO')->sole()->published_at->toIso8601String())->toBe('2026-09-21T08:32:00+00:00');
+});
 
 test('ingests items from the real feed fixture and creates shows and releases', function () {
     $xml = file_get_contents(dirname(__DIR__, 3).'/Fixtures/subsplease_1080.xml');
@@ -164,7 +205,8 @@ test('sets earliest_seen premiere data as soon as a new show gets its first rele
     $show = Show::where('name', 'Test Show')->first();
 
     expect($show->premiere_source)->toBe(PremiereSource::EarliestSeen)
-        ->and($show->premiered_at->toIso8601String())->toBe('2026-09-21T08:32:00+00:00')
+        // pubDate 08:32 "+0000" corrected by the default -420 offset.
+        ->and($show->premiered_at->toIso8601String())->toBe('2026-09-21T15:32:00+00:00')
         ->and($show->season)->not->toBeNull()
         ->and($show->season_year)->not->toBeNull();
 });
@@ -183,7 +225,7 @@ test('upgrades premiere data to episode1 once an episode 01 release arrives', fu
     $show = Show::where('name', 'Test Show')->first();
 
     expect($show->premiere_source)->toBe(PremiereSource::Episode1)
-        ->and($show->premiered_at->toIso8601String())->toBe('2026-06-01T00:00:00+00:00');
+        ->and($show->premiered_at->toIso8601String())->toBe('2026-06-01T07:00:00+00:00');
 });
 
 test('never overwrites an already subsplease-sourced premiere via ingest', function () {

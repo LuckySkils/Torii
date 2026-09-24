@@ -32,12 +32,19 @@ export interface LastPoll {
     error: string | null;
 }
 
+/** PollingDelay::recent() — median first_seen_at − published_at; can be negative if the pubDate offset is wrong. */
+export interface FeedDelay {
+    medianSeconds: number | null;
+    sampleSize: number;
+}
+
 export interface Health {
     qbit: QbitHealth;
     lastPoll: LastPoll | null;
     nextPollAt: string | null;
     pollMode: PollMode;
     driver: DriverMode;
+    delay: FeedDelay;
 }
 
 export interface ReleaseShowRef {
@@ -64,9 +71,16 @@ export interface ReleaseSummary {
     downloadedAt: string | null;
 }
 
+/** LatestReleaseResource — the Release shape, with poster fields on `show` and two novelty flags. */
+export interface DashboardRelease extends Omit<ReleaseSummary, 'show'> {
+    show: (ReleaseShowRef & { imageUrl: string | null; imageStatus: ImageStatus }) | null;
+    isFirstEpisode: boolean;
+    isNewShow: boolean;
+}
+
 export interface DashboardProps {
     health: Health;
-    latestReleases: ReleaseSummary[];
+    latestReleases: DashboardRelease[];
 }
 
 export interface LatestRelease {

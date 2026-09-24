@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\ImageStatus;
 use App\Enums\PremiereSource;
 use App\Jobs\FetchShowImage;
+use App\Models\Release;
 use App\Models\Show;
 use App\Models\ShowImage;
 use App\Services\Premiere\PremiereCalculator;
@@ -14,6 +15,7 @@ use App\Services\SubsPlease\SubsPleaseApiException;
 use Carbon\Carbon;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 beforeEach(function () {
     Http::preventStrayRequests();
@@ -85,6 +87,34 @@ test('a successful fetch also computes and stores the subsplease-sourced premier
 
     expect($show->premiere_source)->toBe(PremiereSource::SubsPlease)
         ->and($show->premiered_at->equalTo($expectedEarliest))->toBeTrue();
+});
+
+test('logs the API release_date minus stored published_at for releases it also has, without extra requests', function () {
+    fakeSearchAndImage();
+    Log::spy();
+
+    $show = imageJobShow();
+    $release = fn (string $guid, array $attributes) => Release::create(array_merge([
+        'show_id' => $show->id,
+        'guid' => $guid,
+        'title' => $guid,
+        'is_batch' => false,
+        'resolution' => '1080p',
+        'link' => 'magnet:?xt=urn:btih:'.$guid,
+        'first_seen_at' => '2026-09-21 00:00:00',
+    ], $attributes));
+
+    // The fixture's API release_date for ep 48 is 03:02:01 and for ep 28v2 10:17:29.
+    $release('EP48', ['episode' => '48', 'published_at' => '2026-09-20 03:02:01']);
+    $release('EP28V2', ['episode' => '28', 'version' => 2, 'published_at' => '2026-04-26 03:17:29']);
+    $release('EP28', ['episode' => '28', 'published_at' => '2026-04-19 00:00:00']);
+
+    (new FetchShowImage($show->id))->handle(new SubsPleaseApiClient, new ShowImageMatcher, new PremiereCalculator);
+
+    Log::shouldHaveReceived('info')->withArgs(fn (string $message, array $context) => str_contains($message, 'release_date minus stored published_at')
+        && $context['show'] === 'Digimon Beatbreak'
+        && $context['diff_minutes'] === ['48' => 0, '28v2' => 420]);
+    Http::assertSentCount(2); // the search and the poster, nothing more
 });
 
 test('a re-fetch with the same image bytes updates the check time but does not rewrite the row', function () {

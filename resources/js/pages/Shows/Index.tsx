@@ -9,19 +9,20 @@ import { RuleBadge } from '@/components/subtracker/rule-badge';
 import { SeasonLabel } from '@/components/subtracker/season-label';
 import { ShowCard } from '@/components/subtracker/show-card';
 import { ShowListRowMobile } from '@/components/subtracker/show-list-row-mobile';
+import { ShowsPagination } from '@/components/subtracker/shows-pagination';
 import { ShowsToolbar } from '@/components/subtracker/shows-toolbar';
 import { TrackSwitch } from '@/components/subtracker/track-switch';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Pagination, PaginationContent, PaginationItem, PaginationLink } from '@/components/ui/pagination';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { useAdaptivePoll } from '@/hooks/use-adaptive-poll';
 import { useRecentActivity } from '@/hooks/use-recent-activity';
 import { useShowsView } from '@/hooks/use-shows-view';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { type RuleState, type ShowsIndexProps } from '@/types/subtracker';
-import { Head, Link, router, usePoll } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import { Eye, LayoutGrid, List, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -36,7 +37,7 @@ export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndex
 
     const recentActivity = useRecentActivity();
     const hasPendingRow = shows.data.some((show) => show.ruleState === 'pending' || show.imageStatus === 'pending');
-    usePoll(hasPendingRow || recentActivity ? 5000 : 60000, { only: ['shows'] });
+    useAdaptivePoll(hasPendingRow || recentActivity ? 5000 : 60000, ['shows']);
 
     useEffect(() => {
         setSelectedIds([]);
@@ -276,30 +277,7 @@ export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndex
                     <div
                         className={`sticky z-30 -mx-3 border-t bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:-mx-4 sm:bottom-0 sm:px-4 ${bulkBarVisible ? 'bottom-16' : 'bottom-0'}`}
                     >
-                        <Pagination>
-                            <PaginationContent>
-                                {shows.meta.links.map((link, index) => (
-                                    <PaginationItem key={index}>
-                                        {link.url === null ? (
-                                            <span
-                                                className="flex h-9 min-w-9 items-center justify-center px-3 text-sm text-muted-foreground opacity-50"
-                                                dangerouslySetInnerHTML={{ __html: link.label }}
-                                            />
-                                        ) : (
-                                            <PaginationLink
-                                                href={link.url}
-                                                isActive={link.active}
-                                                onClick={(e) => {
-                                                    e.preventDefault();
-                                                    goTo(link.url);
-                                                }}
-                                                dangerouslySetInnerHTML={{ __html: link.label }}
-                                            />
-                                        )}
-                                    </PaginationItem>
-                                ))}
-                            </PaginationContent>
-                        </Pagination>
+                        <ShowsPagination links={shows.meta.links} onNavigate={goTo} />
                     </div>
                 )}
             </div>

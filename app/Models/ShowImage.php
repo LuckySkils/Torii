@@ -37,4 +37,13 @@ class ShowImage extends Model
     {
         return $this->belongsTo(Show::class);
     }
+
+    /**
+     * Relative poster URL, versioned by hash so browsers refetch a changed image.
+     * Needs only `show_id` and `sha256`; never select `data` just to build this.
+     */
+    public function url(): string
+    {
+        return route('shows.image', $this->show_id, absolute: false).'?v='.substr($this->sha256, 0, 8);
+    }
 }

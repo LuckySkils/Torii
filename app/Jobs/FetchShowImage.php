@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Enums\ImageStatus;
+use App\Models\Release;
 use App\Models\Show;
 use App\Models\ShowImage;
 use App\Services\Premiere\PremiereCalculator;
+use App\Services\SubsPlease\SearchResultItem;
 use App\Services\SubsPlease\ShowImageMatcher;
 use App\Services\SubsPlease\SubsPleaseApiClient;
+use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -56,6 +59,7 @@ final class FetchShowImage implements ShouldBeUnique, ShouldQueue
         $candidates = $matcher->candidates($results, $show->name);
 
         $premiereCalculator->apply($show, $premiereCalculator->fromSubsPlease($candidates));
+        $this->logPublishedAtDrift($show, $candidates);
 
         $match = $matcher->firstWithImage($candidates);
 
@@ -129,6 +133,58 @@ final class FetchShowImage implements ShouldBeUnique, ShouldQueue
             'image_checked_at' => now(),
             'image_error' => null,
         ]);
+    }
+
+    /**
+     * Free drift check for FEED_PUBDATE_OFFSET_MINUTES: the search results already
+     * carry the API's (correct) release_date, so compare it with our stored
+     * published_at for any release we also have. Never makes a request of its own.
+     *
+     * @param  array<int, SearchResultItem>  $candidates
+     */
+    private function logPublishedAtDrift(Show $show, array $candidates): void
+    {
+        $releases = $show->releases()->get(['id', 'episode', 'version', 'is_batch', 'batch_from', 'batch_to', 'published_at']);
+        $diffMinutes = [];
+
+        foreach ($candidates as $item) {
+            $episode = (string) $item->episode;
+            $release = $releases->first(fn (Release $release) => $this->isSameRelease($release, $episode));
+
+            if ($release === null || $item->releaseDate === null) {
+                continue;
+            }
+
+            try {
+                $apiTime = Carbon::parse($item->releaseDate)->utc();
+            } catch (Throwable) {
+                continue;
+            }
+
+            $diffMinutes[$episode] = (int) round($release->published_at->diffInSeconds($apiTime, false) / 60);
+        }
+
+        if ($diffMinutes !== []) {
+            logger()->info('SubsPlease API release_date minus stored published_at (minutes)', [
+                'show' => $show->name,
+                'diff_minutes' => $diffMinutes,
+            ]);
+        }
+    }
+
+    private function isSameRelease(Release $release, string $apiEpisode): bool
+    {
+        if (preg_match('/^(\d+)-(\d+)$/', $apiEpisode, $range) === 1) {
+            return $release->is_batch
+                && $release->batch_from === (int) $range[1]
+                && $release->batch_to === (int) $range[2];
+        }
+
+        if ($release->is_batch || $release->episode === null) {
+            return false;
+        }
+
+        return $release->episode.($release->version !== null ? 'v'.$release->version : '') === $apiEpisode;
     }
 
     public function failed(Throwable $exception): void

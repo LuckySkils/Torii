@@ -25,6 +25,7 @@ class Release extends Model
         'infohash',
         'size_label',
         'published_at',
+        'published_at_raw',
         'first_seen_at',
         'dispatched_at',
         'dispatch_error',

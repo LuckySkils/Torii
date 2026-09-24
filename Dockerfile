@@ -19,6 +19,10 @@ WORKDIR /app
 # ---------------------------------------------------------------------------
 FROM base AS build
 
+# Baked into the JS bundle at build time; the tab title reads the shared app name
+# at runtime anyway, this is only a fallback.
+ENV VITE_APP_NAME=Torii
+
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 COPY --from=node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
 COPY --from=node:22-bookworm-slim /usr/local/lib/node_modules /usr/local/lib/node_modules
@@ -58,6 +62,7 @@ ENV APP_NAME=Torii \
     SESSION_DRIVER=database \
     FEED_URL=https://subsplease.org/rss/?r=1080 \
     FEED_POLL_BASE_MINUTES=15 \
+    FEED_PUBDATE_OFFSET_MINUTES=-420 \
     QBIT_FEED_PATH="SubsPlease 1080p" \
     QBIT_CATEGORY=anime \
     QBIT_RULE_PREFIX="[ST] " \

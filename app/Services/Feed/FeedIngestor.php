@@ -10,7 +10,6 @@ use App\Events\ShowDiscovered;
 use App\Models\Release;
 use App\Models\Show;
 use App\Services\Premiere\PremiereCalculator;
-use Carbon\Carbon;
 use Illuminate\Support\Str;
 use SimpleXMLElement;
 
@@ -21,6 +20,7 @@ final class FeedIngestor
     public function __construct(
         private readonly SubsPleaseTitleParser $parser = new SubsPleaseTitleParser,
         private readonly PremiereCalculator $premiereCalculator = new PremiereCalculator,
+        private readonly PubDateCorrector $pubDateCorrector = new PubDateCorrector,
     ) {}
 
     public function ingest(string $xmlBody): IngestResult
@@ -117,6 +117,8 @@ final class FeedIngestor
         $sizeLabel = isset($namespaced->size) ? (string) $namespaced->size : null;
 
         $existing = Release::where('guid', $guid)->first();
+        $firstSeenAt = $existing?->first_seen_at ?? now();
+        $rawPubDate = (string) $item->pubDate;
 
         $attributes = [
             'show_id' => $showId,
@@ -131,11 +133,12 @@ final class FeedIngestor
             'link' => $link,
             'infohash' => $this->extractInfohash($link),
             'size_label' => $sizeLabel,
-            'published_at' => Carbon::parse((string) $item->pubDate)->utc(),
+            'published_at' => $this->pubDateCorrector->correct($rawPubDate, $firstSeenAt, (string) $item->title),
+            'published_at_raw' => $rawPubDate,
         ];
 
         if ($existing === null) {
-            $release = Release::create([...$attributes, 'guid' => $guid, 'first_seen_at' => now()]);
+            $release = Release::create([...$attributes, 'guid' => $guid, 'first_seen_at' => $firstSeenAt]);
 
             NewReleaseDetected::dispatch($release);
 

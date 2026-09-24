@@ -16,6 +16,8 @@ services:
       QBIT_CATEGORY: ${QBIT_CATEGORY:-anime}
       APP_URL: ${APP_URL:-http://localhost:8080}
       DB_PASSWORD: ${DB_PASSWORD:-torii}
+      # SubsPlease's pubDate runs this many minutes off UTC (may need -480 after US DST ends)
+      FEED_PUBDATE_OFFSET_MINUTES: ${FEED_PUBDATE_OFFSET_MINUTES:--420}
       # Notifications: empty NTFY_URL = off
       NTFY_URL: ${NTFY_URL:-}
       NTFY_TOPIC: ${NTFY_TOPIC:-torii}

@@ -169,6 +169,7 @@ For a permanent setup, run these under systemd or Supervisor. Restart `queue:wor
 | `QBIT_TAG` | `subtracker` | Tag added to torrents Torii queues directly |
 | `FEED_URL` | `https://subsplease.org/rss/?r=1080` | SubsPlease feed to track |
 | `FEED_POLL_BASE_MINUTES` | `15` | Normal poll interval |
+| `FEED_PUBDATE_OFFSET_MINUTES` | `-420` | Correction for the feed's timestamps. SubsPlease labels them `+0000`, but their clock runs 7 hours behind UTC, so Torii shifts every release time 7 hours later to get true UTC. If their offset follows US daylight saving, this will need to be `-480` from November; the dashboard's median polling delay drifting by about an hour is the sign. After changing it, run `releases:fix-published`. |
 | `APP_URL` | `http://localhost:8080` | Address you open Torii at |
 | `TORII_PORT` | `8080` | Docker: host port for the web UI |
 | `TORII_DATA_DIR` | `./data` | Docker: host folder for the database, app key and ntfy data |
@@ -196,6 +197,7 @@ With Docker, prefix these with `docker compose exec torii php artisan`. Most of 
 | `images:fetch {--missing} {--all}` | Fetch posters from SubsPlease |
 | `shows:recompute-premiere` | Recalculate premiere dates and seasons |
 | `releases:recheck-errors` | Re-check failed queue attempts against qBittorrent |
+| `releases:fix-published` | Recompute every release time from the raw feed value and `FEED_PUBDATE_OFFSET_MINUTES` (safe to re-run) |
 
 ## Limitations
 

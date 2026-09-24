@@ -11,11 +11,12 @@ import { ShowPoster } from '@/components/subtracker/show-poster';
 import { TapInfo } from '@/components/subtracker/tap-info';
 import { TrackSwitch } from '@/components/subtracker/track-switch';
 import { Button } from '@/components/ui/button';
+import { useAdaptivePoll } from '@/hooks/use-adaptive-poll';
 import { useRecentActivity } from '@/hooks/use-recent-activity';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { type LatestRelease, type RuleState, type ShowShowProps } from '@/types/subtracker';
-import { Head, router, usePoll } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { useState } from 'react';
 
 const DELETABLE_RULE_STATES: RuleState[] = ['synced', 'disabled', 'error'];
@@ -55,7 +56,7 @@ export default function ShowShow({ show, releases }: ShowShowProps) {
 
     const recentActivity = useRecentActivity();
     const isActive = recentActivity || show.ruleState === 'pending' || show.imageStatus === 'pending';
-    usePoll(isActive ? 5000 : 60000, { only: ['show', 'releases'] });
+    useAdaptivePoll(isActive ? 5000 : 60000, ['show', 'releases']);
 
     // `releases` is already sorted newest-first by published_at, so [0] is the latest —
     // used instead of `show.latest`, which the controller doesn't eager-load on this page.
@@ -201,7 +202,7 @@ export default function ShowShow({ show, releases }: ShowShowProps) {
                                 ))}
                             </div>
                             <div className="hidden md:block">
-                                <ReleasesTable releases={releases} versionColumn emptyMessage="No releases for this show yet." />
+                                <ReleasesTable releases={releases} emptyMessage="No releases for this show yet." />
                             </div>
                         </>
                     )}

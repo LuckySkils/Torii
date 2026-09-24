@@ -1,5 +1,6 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { formatLag } from '@/lib/dates';
 import { type SharedData } from '@/types';
 import { type Health } from '@/types/subtracker';
 import { router, usePage } from '@inertiajs/react';
@@ -145,6 +146,21 @@ export function HealthStrip({ health }: HealthStripProps) {
                         Next poll{' '}
                         {health.nextPollAt ? <RelativeTime iso={health.nextPollAt} /> : <span className="text-muted-foreground">unscheduled</span>}
                     </span>
+                    {health.delay.medianSeconds !== null && health.delay.sampleSize > 0 && (
+                        <span>
+                            <TapInfo
+                                trigger={
+                                    <button type="button" className="cursor-pointer bg-transparent p-0 text-left underline decoration-dotted underline-offset-2">
+                                        New releases usually spotted within ~{formatLag(health.delay.medianSeconds)}
+                                    </button>
+                                }
+                            >
+                                How long Torii typically takes to notice a release after SubsPlease publishes it, based on the last{' '}
+                                {health.delay.sampleSize} release{health.delay.sampleSize === 1 ? '' : 's'}. A few minutes is normal. If it suddenly
+                                jumps to about an hour, the feed's clock has probably shifted and Torii's time offset needs adjusting.
+                            </TapInfo>
+                        </span>
+                    )}
                 </div>
 
                 <div className="grid grid-cols-1 gap-2 sm:flex sm:w-auto sm:gap-2">

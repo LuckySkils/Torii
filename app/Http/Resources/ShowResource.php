@@ -17,7 +17,7 @@ final class ShowResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        $image = $this->resource->image()->first(['id', 'sha256', 'width', 'height']);
+        $image = $this->resource->image()->first(['id', 'show_id', 'sha256', 'width', 'height']);
 
         return [
             'id' => $this->id,
@@ -39,7 +39,7 @@ final class ShowResource extends JsonResource
             'queuedCount' => $this->releases()->whereIn('dispatch_status', [DispatchStatus::Sent, DispatchStatus::Exists])->count(),
             'downloadableCount' => app(DownloadPlanner::class)->downloadableSet($this->resource)->count(),
             'downloadedCount' => $this->releases()->whereNotNull('downloaded_at')->count(),
-            'imageUrl' => $image === null ? null : route('shows.image', $this->id, absolute: false).'?v='.substr($image->sha256, 0, 8),
+            'imageUrl' => $image?->url(),
             'imageStatus' => $this->image_status->value,
             'imageCheckedAt' => $this->image_checked_at?->toIso8601String(),
             'imageError' => $this->image_error,
