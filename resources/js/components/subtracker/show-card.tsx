@@ -1,3 +1,4 @@
+import { AnimeLinkIndicator } from '@/components/subtracker/anime-link-indicator';
 import { BatchHint } from '@/components/subtracker/batch-hint';
 import { DeleteRuleDialog } from '@/components/subtracker/delete-rule-dialog';
 import { LatestEpisodeLabel } from '@/components/subtracker/latest-episode-label';
@@ -9,6 +10,7 @@ import { TrackSwitch } from '@/components/subtracker/track-switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { latestEpisodeNumber, posterFor } from '@/lib/anime';
 import { cn, TOUCH_TARGET_MD } from '@/lib/utils';
 import { type RuleState, type ShowSummary } from '@/types/subtracker';
 import { Link } from '@inertiajs/react';
@@ -31,6 +33,7 @@ export function ShowCard({ show, selected, onToggleSelect, selectionMode = false
     const [deleteOpen, setDeleteOpen] = useState(false);
     const canDeleteRule = DELETABLE_RULE_STATES.includes(show.ruleState);
     const checkboxVisible = selected || selectionMode;
+    const poster = posterFor(show);
 
     function openMatches() {
         setMenuOpen(false);
@@ -53,10 +56,7 @@ export function ShowCard({ show, selected, onToggleSelect, selectionMode = false
                         aria-label={`${selected ? 'Deselect' : 'Select'} ${show.name}`}
                     >
                         <ShowPoster
-                            imageUrl={show.imageUrl}
-                            imageStatus={show.imageStatus}
-                            imageWidth={show.imageWidth}
-                            imageHeight={show.imageHeight}
+                            {...poster}
                             name={show.name}
                             className="w-full"
                         />
@@ -64,10 +64,7 @@ export function ShowCard({ show, selected, onToggleSelect, selectionMode = false
                 ) : (
                     <Link href={`/shows/${show.id}`}>
                         <ShowPoster
-                            imageUrl={show.imageUrl}
-                            imageStatus={show.imageStatus}
-                            imageWidth={show.imageWidth}
-                            imageHeight={show.imageHeight}
+                            {...poster}
                             name={show.name}
                             className="w-full"
                         />
@@ -162,6 +159,7 @@ export function ShowCard({ show, selected, onToggleSelect, selectionMode = false
                 />
                 <RuleBadge trackingMode={show.trackingMode} state={show.ruleState} error={show.ruleError} />
                 {show.hasBatch && !show.isTracked && <BatchHint />}
+                <AnimeLinkIndicator show={show} currentEpisode={latestEpisodeNumber(show.latest)} className="ml-auto" />
             </div>
 
             <MatchesDialog showId={show.id} showName={show.name} open={matchesOpen} onOpenChange={setMatchesOpen} />

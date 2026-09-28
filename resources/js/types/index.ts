@@ -15,6 +15,9 @@ export interface NavItem {
     url: string;
     icon?: LucideIcon | null;
     isActive?: boolean;
+    badge?: number;
+    /** Where clicking the badge goes (e.g. the filtered list it counts). */
+    badgeUrl?: string;
 }
 
 export interface SharedData {
@@ -23,5 +26,7 @@ export interface SharedData {
     flash: { success: string | null; error: string | null };
     driver: 'rules' | 'push';
     notifications: { enabled: boolean; topic: string | null };
+    /** Shows with anime-link suggestions waiting for review. */
+    pendingLinkSuggestions: number;
     [key: string]: unknown;
 }

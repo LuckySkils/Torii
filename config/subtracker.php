@@ -25,6 +25,19 @@ return [
         'tag' => env('QBIT_TAG', 'subtracker'),
     ],
 
+    'metadata' => [
+        // Key of the active MetadataProvider (see AppServiceProvider).
+        'provider' => env('METADATA_PROVIDER', 'anilist'),
+        'anilist' => [
+            'url' => 'https://graphql.anilist.co',
+            // AniList documents 90/min but has long run degraded at 30/min; stay below that.
+            'requests_per_minute' => (int) env('ANILIST_REQUESTS_PER_MINUTE', 25),
+            // Longest a queued job waits on the throttle before releasing itself back to the
+            // queue instead; keeps jobs under the worker's 60s timeout.
+            'max_wait_seconds' => 30,
+        ],
+    ],
+
     'notifications' => [
         'enabled' => env('NTFY_URL', '') !== '' && env('NTFY_TOPIC', 'torii') !== '',
         'ntfy_url' => env('NTFY_URL', ''),

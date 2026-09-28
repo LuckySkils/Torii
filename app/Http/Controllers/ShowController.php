@@ -8,6 +8,7 @@ use App\Http\Resources\ReleaseResource;
 use App\Http\Resources\ShowResource;
 use App\Models\Release;
 use App\Models\Show;
+use App\Models\ShowAnimeSuggestion;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -21,8 +22,13 @@ class ShowController extends Controller
         $sort = (string) $request->query('sort', 'name');
         $season = $this->nullableString($request->query('season'));
         $year = $this->nullableInt($request->query('year'));
+        // review=1: only shows with link suggestions waiting for a decision.
+        $review = $request->boolean('review');
 
-        $query = Show::query()->with('latestRelease');
+        $query = Show::query()->with([
+            'latestRelease',
+            'animeLink.anime.image' => fn ($query) => $query->select(['id', 'anime_id', 'sha256', 'width', 'height']),
+        ])->withExists('animeSuggestions');
 
         if ($search !== '') {
             $query->whereLike('name', '%'.$this->escapeLikeValue($search).'%');
@@ -42,6 +48,10 @@ class ShowController extends Controller
             $query->where('season_year', $year);
         }
 
+        if ($review) {
+            $query->whereHas('animeSuggestions');
+        }
+
         match ($sort) {
             'last_seen' => $query->orderByDesc('last_seen_at'),
             'premiered' => $query->orderByRaw('premiered_at DESC NULLS LAST'),
@@ -56,6 +66,7 @@ class ShowController extends Controller
                 'sort' => $sort,
                 'season' => $season,
                 'year' => $year,
+                'review' => $review,
             ],
             'filterOptions' => [
                 'years' => Show::query()
@@ -64,6 +75,8 @@ class ShowController extends Controller
                     ->orderByDesc('season_year')
                     ->pluck('season_year')
                     ->all(),
+                // How many shows the review filter would show, whatever the other filters.
+                'reviewCount' => ShowAnimeSuggestion::query()->distinct()->count('show_id'),
             ],
         ]);
     }
@@ -94,7 +107,7 @@ class ShowController extends Controller
     public function show(Show $show): Response
     {
         return Inertia::render('Shows/Show', [
-            'show' => (new ShowResource($show))->resolve(),
+            'show' => (new ShowResource($show))->withFullAnime()->resolve(),
             'releases' => $show->releases()->latest('published_at')->get()
                 ->map(fn (Release $release) => (new ReleaseResource($release))->resolve())
                 ->all(),

@@ -1,3 +1,4 @@
+import { AnimeLinkIndicator } from '@/components/subtracker/anime-link-indicator';
 import { BatchHint } from '@/components/subtracker/batch-hint';
 import { BulkBar } from '@/components/subtracker/bulk-bar';
 import { DeleteRuleDialog } from '@/components/subtracker/delete-rule-dialog';
@@ -11,6 +12,7 @@ import { ShowCard } from '@/components/subtracker/show-card';
 import { ShowListRowMobile } from '@/components/subtracker/show-list-row-mobile';
 import { ShowsPagination } from '@/components/subtracker/shows-pagination';
 import { ShowsToolbar } from '@/components/subtracker/shows-toolbar';
+import { AiredAheadLine } from '@/components/subtracker/aired-ahead-line';
 import { TrackSwitch } from '@/components/subtracker/track-switch';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -20,6 +22,7 @@ import { useAdaptivePoll } from '@/hooks/use-adaptive-poll';
 import { useRecentActivity } from '@/hooks/use-recent-activity';
 import { useShowsView } from '@/hooks/use-shows-view';
 import AppLayout from '@/layouts/app-layout';
+import { latestEpisodeNumber, posterFor } from '@/lib/anime';
 import { type BreadcrumbItem } from '@/types';
 import { type RuleState, type ShowsIndexProps } from '@/types/subtracker';
 import { Head, Link, router } from '@inertiajs/react';
@@ -42,7 +45,7 @@ export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndex
     useEffect(() => {
         setSelectedIds([]);
         setSelectionMode(false);
-    }, [filters.q, filters.tracked, filters.sort, filters.season, filters.year, shows.meta.current_page]);
+    }, [filters.q, filters.tracked, filters.sort, filters.season, filters.year, filters.review, shows.meta.current_page]);
 
     const pageIds = shows.data.map((show) => show.id);
     const allSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id));
@@ -64,12 +67,13 @@ export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndex
     function clearFilters() {
         router.get(
             '/shows',
-            { q: '', tracked: 'all', sort: filters.sort, season: '', year: '' },
+            { q: '', tracked: 'all', sort: filters.sort, season: '', year: '', review: '' },
             { preserveState: true, preserveScroll: true, replace: true },
         );
     }
 
-    const isFiltered = filters.q !== '' || filters.tracked !== 'all' || filters.season !== null || filters.year !== null;
+    const isFiltered = filters.q !== '' || filters.tracked !== 'all' || filters.season !== null || filters.year !== null || filters.review;
+    const onlyReviewFilter = filters.review && filters.q === '' && filters.tracked === 'all' && filters.season === null && filters.year === null;
     const isEmptyCatalog = shows.meta.total === 0 && !isFiltered;
     const isEmptyResults = shows.data.length === 0 && !isEmptyCatalog;
     const bulkBarVisible = selectedIds.length > 0;
@@ -79,7 +83,7 @@ export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndex
             <Head title="Shows" />
             <div className={`flex h-full flex-1 flex-col gap-4 p-3 sm:p-4 ${bulkBarVisible ? 'pb-24 sm:pb-4' : ''}`}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                    <ShowsToolbar filters={filters} years={filterOptions.years} view={view} onViewChange={setView} />
+                    <ShowsToolbar filters={filters} years={filterOptions.years} reviewCount={filterOptions.reviewCount} view={view} onViewChange={setView} />
                     <ToggleGroup
                         type="single"
                         value={view}
@@ -127,11 +131,18 @@ export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndex
 
                 {isEmptyResults && (
                     <div className="flex flex-col items-center gap-2 rounded-xl border p-8 text-center text-sm text-muted-foreground">
-                        <p>No shows match your filters.</p>
+                        <p>{onlyReviewFilter ? 'Nothing needs review right now.' : 'No shows match your filters.'}</p>
                         <Button variant="outline" size="sm" onClick={clearFilters}>
                             Clear filters
                         </Button>
                     </div>
+                )}
+
+                {filters.review && shows.data.length > 0 && (
+                    <p className="text-sm text-muted-foreground">
+                        {shows.meta.total} show{shows.meta.total === 1 ? '' : 's'} with anime link suggestions waiting. Open the amber{' '}
+                        <span className="font-medium text-amber-700 dark:text-amber-300">review</span> badge to pick the right entry.
+                    </p>
                 )}
 
                 {shows.data.length > 0 && view === 'grid' && (
@@ -189,13 +200,7 @@ export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndex
                                                 />
                                             </TableCell>
                                             <TableCell>
-                                                <PosterHoverPreview
-                                                    imageUrl={show.imageUrl}
-                                                    imageStatus={show.imageStatus}
-                                                    imageWidth={show.imageWidth}
-                                                    imageHeight={show.imageHeight}
-                                                    name={show.name}
-                                                />
+                                                <PosterHoverPreview {...posterFor(show)} name={show.name} />
                                             </TableCell>
                                             <TableCell>
                                                 <div className="flex flex-col gap-0.5">
@@ -204,6 +209,7 @@ export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndex
                                                             {show.name}
                                                         </Link>
                                                         {show.hasBatch && !show.isTracked && <BatchHint />}
+                                                        <AnimeLinkIndicator show={show} currentEpisode={latestEpisodeNumber(show.latest)} />
                                                     </div>
                                                     <SeasonLabel
                                                         season={show.season}
@@ -211,6 +217,7 @@ export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndex
                                                         premiereSource={show.premiereSource}
                                                         className="text-xs text-muted-foreground"
                                                     />
+                                                    <AiredAheadLine show={show} />
                                                 </div>
                                             </TableCell>
                                             <TableCell>

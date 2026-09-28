@@ -1,9 +1,11 @@
+import { AnimeLinkIndicator } from '@/components/subtracker/anime-link-indicator';
 import { HealthStrip } from '@/components/subtracker/health-strip';
 import { LatestReleasesTable, ReleaseEpisode, ReleaseThumb } from '@/components/subtracker/latest-releases-table';
 import { FirstEpisodeBadge, isPremiere, NewShowBadge } from '@/components/subtracker/novelty-badges';
 import { ReleaseCard } from '@/components/subtracker/release-card';
 import { useAdaptivePoll } from '@/hooks/use-adaptive-poll';
 import AppLayout from '@/layouts/app-layout';
+import { latestEpisodeNumber } from '@/lib/anime';
 import { type BreadcrumbItem } from '@/types';
 import { type DashboardProps } from '@/types/subtracker';
 import { Head } from '@inertiajs/react';
@@ -36,10 +38,11 @@ export default function Dashboard({ health, latestReleases }: DashboardProps) {
                                         poster={<ReleaseThumb release={release} className="w-24" />}
                                         episode={<ReleaseEpisode release={release} />}
                                         badges={
-                                            release.isNewShow || isPremiere(release) ? (
+                                            release.isNewShow || isPremiere(release) || release.show?.anime || release.show?.hasSuggestions ? (
                                                 <>
                                                     {release.isNewShow && <NewShowBadge />}
                                                     {isPremiere(release) && <FirstEpisodeBadge />}
+                                                    {release.show && <AnimeLinkIndicator show={release.show} currentEpisode={latestEpisodeNumber(release)} />}
                                                 </>
                                             ) : undefined
                                         }

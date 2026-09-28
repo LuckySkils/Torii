@@ -3,7 +3,10 @@
 namespace App\Providers;
 
 use App\Contracts\DownloadDriver;
+use App\Contracts\MetadataProvider;
 use App\Contracts\Notifier;
+use App\Services\Metadata\AniList\AniListProvider;
+use App\Services\Metadata\MetadataProviders;
 use App\Services\Notifications\NtfyNotifier;
 use App\Services\Notifications\NullNotifier;
 use App\Services\QBittorrent\RulesDriver;
@@ -30,6 +33,13 @@ class AppServiceProvider extends ServiceProvider
                 ? $this->app->make(NtfyNotifier::class)
                 : $this->app->make(NullNotifier::class);
         });
+
+        $this->app->singleton(MetadataProviders::class, fn () => new MetadataProviders([
+            $this->app->make(AniListProvider::class),
+        ]));
+
+        $this->app->bind(MetadataProvider::class, fn () => $this->app->make(MetadataProviders::class)
+            ->get((string) config('subtracker.metadata.provider')));
     }
 
     /**

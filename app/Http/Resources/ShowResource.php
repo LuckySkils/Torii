@@ -15,9 +15,25 @@ use Illuminate\Http\Resources\Json\JsonResource;
  */
 final class ShowResource extends JsonResource
 {
+    private bool $fullAnime = false;
+
+    /** The show page gets the full `anime` object; lists get the summary (§9.7). */
+    public function withFullAnime(): self
+    {
+        $this->fullAnime = true;
+
+        return $this;
+    }
+
     public function toArray(Request $request): array
     {
         $image = $this->resource->image()->first(['id', 'show_id', 'sha256', 'width', 'height']);
+
+        // No-op when the controller already eager-loaded these for the whole page.
+        $this->resource->loadMissing([
+            'animeLink.anime.image' => fn ($query) => $query->select(['id', 'anime_id', 'sha256', 'width', 'height']),
+            ...($this->fullAnime ? ['animeLink.anime.nextAiring'] : []),
+        ]);
 
         return [
             'id' => $this->id,
@@ -49,6 +65,10 @@ final class ShowResource extends JsonResource
             'seasonYear' => $this->season_year,
             'premieredAt' => $this->premiered_at?->toIso8601String(),
             'premiereSource' => $this->premiere_source?->value,
+            'hasSuggestions' => (bool) ($this->resource->anime_suggestions_exists ?? $this->resource->animeSuggestions()->exists()),
+            'anime' => $this->fullAnime
+                ? LinkedAnimeResource::fullFor($this->animeLink)
+                : LinkedAnimeResource::summaryFor($this->animeLink),
         ];
     }
 }

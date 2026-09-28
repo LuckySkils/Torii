@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\Anime;
+use App\Models\Show;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -47,4 +49,47 @@ expect()->extend('toBeOne', function () {
 function something()
 {
     // ..
+}
+
+/**
+ * A real AniList response from tests/Fixtures/anilist/, decoded.
+ *
+ * @return array<string, mixed>
+ */
+function anilistFixture(string $name): array
+{
+    return json_decode(file_get_contents(__DIR__.'/Fixtures/anilist/'.$name.'.json'), true, flags: JSON_THROW_ON_ERROR);
+}
+
+/**
+ * A stored anime with its AniList id, for metadata tests.
+ *
+ * @param  array<string, mixed>  $attributes
+ */
+function metadataAnime(array $attributes = [], ?string $anilistId = null): Anime
+{
+    $anime = Anime::create([
+        'title_romaji' => 'Some Anime',
+        'primary_provider' => 'anilist',
+        'synced_at' => now(),
+        ...$attributes,
+    ]);
+
+    $anime->externalIds()->create(['provider' => 'anilist', 'external_id' => $anilistId ?? (string) (100000 + $anime->id)]);
+
+    return $anime;
+}
+
+/**
+ * @param  array<string, mixed>  $attributes
+ */
+function metadataShow(string $name, array $attributes = []): Show
+{
+    return Show::create([
+        'name' => $name,
+        'slug' => str($name)->slug(),
+        'first_seen_at' => now(),
+        'last_seen_at' => now(),
+        ...$attributes,
+    ]);
 }

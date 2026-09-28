@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\AnimeController;
+use App\Http\Controllers\AnimeLinkController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ImageController;
 use App\Http\Controllers\NotificationController;
@@ -30,3 +32,13 @@ Route::post('feed/poll', [SystemController::class, 'pollFeed'])->name('feed.poll
 Route::post('qbit/reconcile', [SystemController::class, 'reconcile'])->name('qbit.reconcile');
 
 Route::post('notifications/test', [NotificationController::class, 'test'])->name('notifications.test');
+
+Route::get('shows/{show}/link/search', [AnimeLinkController::class, 'search'])->name('shows.link.search');
+Route::get('shows/{show}/link/suggestions', [AnimeLinkController::class, 'suggestions'])->name('shows.link.suggestions');
+Route::delete('shows/{show}/link/suggestions/{anime}', [AnimeLinkController::class, 'rejectSuggestion'])->name('shows.link.suggestions.reject');
+Route::post('shows/{show}/link', [AnimeLinkController::class, 'store'])->name('shows.link.store');
+Route::delete('shows/{show}/link', [AnimeLinkController::class, 'destroy'])->name('shows.link.destroy');
+
+Route::get('anime', [AnimeController::class, 'index'])->name('anime.index');
+Route::get('anime/{anime}', [AnimeController::class, 'show'])->name('anime.show');
+Route::get('anime/{anime}/cover', [AnimeController::class, 'cover'])->name('anime.cover');

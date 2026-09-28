@@ -73,7 +73,14 @@ export interface ReleaseSummary {
 
 /** LatestReleaseResource — the Release shape, with poster fields on `show` and two novelty flags. */
 export interface DashboardRelease extends Omit<ReleaseSummary, 'show'> {
-    show: (ReleaseShowRef & { imageUrl: string | null; imageStatus: ImageStatus }) | null;
+    show:
+        | (ReleaseShowRef & {
+              imageUrl: string | null;
+              imageStatus: ImageStatus;
+              anime: AnimeLinkSummary | null;
+              hasSuggestions: boolean;
+          })
+        | null;
     isFirstEpisode: boolean;
     isNewShow: boolean;
 }
@@ -122,6 +129,10 @@ export interface ShowSummary {
     seasonYear: number | null;
     premieredAt: string | null;
     premiereSource: PremiereSource | null;
+    /** Automatic matching found candidates too close to call; they're waiting for review. */
+    hasSuggestions: boolean;
+    /** Null when unlinked. The summary on lists; Shows/Show gets AnimeLinkFull. */
+    anime: AnimeLinkSummary | null;
 }
 
 export interface PaginationLinkItem {
@@ -131,9 +142,9 @@ export interface PaginationLinkItem {
     active: boolean;
 }
 
-/** Shape produced by ShowResource::collection($paginator) via Inertia. */
-export interface PaginatedShows {
-    data: ShowSummary[];
+/** Laravel's paginated-resource shape: `{ data, links, meta }`. */
+export interface Paginated<T> {
+    data: T[];
     links: {
         first: string | null;
         last: string | null;
@@ -152,16 +163,22 @@ export interface PaginatedShows {
     };
 }
 
+export type PaginatedShows = Paginated<ShowSummary>;
+
 export interface ShowFilters {
     q: string;
     tracked: 'all' | 'yes' | 'no';
     sort: 'name' | 'last_seen' | 'premiered';
     season: Season | null;
     year: number | null;
+    /** review=1: only shows with link suggestions waiting; combines with the rest. */
+    review: boolean;
 }
 
 export interface FilterOptions {
     years: number[];
+    /** Shows with pending suggestions, whatever the other filters. */
+    reviewCount: number;
 }
 
 export interface ShowsIndexProps {
@@ -171,9 +188,174 @@ export interface ShowsIndexProps {
 }
 
 export interface ShowShowProps {
-    show: ShowSummary;
+    show: ShowSummary & { anime: AnimeLinkFull | null };
     releases: ReleaseSummary[];
 }
 
 /** GET /shows/{show}/matches — qBit's rss/matchingArticles, keyed by feed name. */
 export type MatchingArticles = Record<string, string[]>;
+
+// ---- Anime metadata (phase 9) -------------------------------------------------
+
+export type LinkSource = 'auto' | 'manual';
+
+/** AniList's own vocabularies, passed through as-is. */
+export type AnimeSeason = 'WINTER' | 'SPRING' | 'SUMMER' | 'FALL';
+
+export type MatchRule = 'exact' | 'subtitle_prefix' | 'season_marker' | 'similarity';
+
+/** LinkedAnimeResource summary — `anime` on show lists and dashboard entries. */
+export interface AnimeLinkSummary {
+    id: number;
+    titleRomaji: string | null;
+    titleEnglish: string | null;
+    /** Torii-served cover, null until downloaded. */
+    coverUrl: string | null;
+    coverWidth: number | null;
+    coverHeight: number | null;
+    episodesAired: number | null;
+    linkSource: LinkSource;
+}
+
+/** LinkedAnimeResource full — `show.anime` on Shows/Show. `description` is AniList HTML, unsanitised. */
+export interface AnimeLinkFull extends AnimeLinkSummary {
+    genres: string[];
+    episodesTotal: number | null;
+    status: string | null;
+    format: string | null;
+    durationMinutes: number | null;
+    description: string | null;
+    season: string | null;
+    seasonYear: number | null;
+    nextAiringAt: string | null;
+    nextEpisode: number | null;
+    siteUrl: string | null;
+    confidence: number;
+}
+
+/** A row of GET /shows/{show}/link/search. */
+export interface LinkSearchResult {
+    id: number;
+    titleRomaji: string | null;
+    titleEnglish: string | null;
+    titleNative: string | null;
+    season: string | null;
+    seasonYear: number | null;
+    format: string | null;
+    episodesTotal: number | null;
+    coverUrl: string | null;
+    coverWidth: number | null;
+    coverHeight: number | null;
+    /** The season number the titles imply (1 when none says otherwise). */
+    seasonNumber: number;
+    score: number;
+    linkedShows: ReleaseShowRef[];
+}
+
+export interface LinkSearchResponse {
+    /** The show name, or the typed text. */
+    query: string;
+    /** What was sent to the provider: without a typed q, the show name minus its season marker. */
+    searchedQuery: string;
+    /** The season number wanted; only ranks results. */
+    season: number;
+    results: LinkSearchResult[];
+    providerSearched: boolean;
+    providerError: string | null;
+}
+
+/** A row of GET /shows/{show}/link/suggestions. */
+/** Why matching suggested a candidate instead of linking it (SuggestionReason enum). */
+export type SuggestionReason = 'ambiguous' | 'episode_count' | 'show_has_rejection';
+
+export interface LinkSuggestion extends LinkSearchResult {
+    rule: MatchRule;
+    reason: SuggestionReason;
+    createdAt: string;
+}
+
+export interface AnimeLinkedShowRef {
+    id: number;
+    name: string;
+    linkSource: LinkSource;
+    confidence: number;
+}
+
+/** AnimeResource — one anime on Anime/Index. */
+export interface AnimeItem {
+    id: number;
+    titleRomaji: string | null;
+    titleEnglish: string | null;
+    titleNative: string | null;
+    coverUrl: string | null;
+    coverWidth: number | null;
+    coverHeight: number | null;
+    format: string | null;
+    status: string | null;
+    season: string | null;
+    seasonYear: number | null;
+    episodesTotal: number | null;
+    episodesAired: number | null;
+    genres: string[];
+    startDate: string | null;
+    nextAiringAt: string | null;
+    nextEpisode: number | null;
+    isAdult: boolean;
+    linkedShows: AnimeLinkedShowRef[];
+}
+
+/** AnimeResource::detail() — Anime/Show. `description` is AniList HTML, unsanitised. */
+export interface AnimeDetail extends AnimeItem {
+    synonyms: string[];
+    description: string | null;
+    endDate: string | null;
+    durationMinutes: number | null;
+    siteUrl: string | null;
+    externalIds: Record<string, string>;
+    primaryProvider: string;
+    syncedAt: string;
+}
+
+export interface AnimeAiring {
+    episode: number;
+    airsAt: string;
+    isEstimate: boolean;
+    provider: string;
+}
+
+export interface AnimeShowLinkedShow {
+    id: number;
+    name: string;
+    imageUrl: string | null;
+    isTracked: boolean;
+    linkSource: LinkSource;
+    confidence: number;
+    linkedAt: string;
+}
+
+export interface AnimeFilters {
+    season: AnimeSeason | null;
+    year: number | null;
+    status: string | null;
+    genre: string | null;
+    linked: 'all' | 'yes' | 'no';
+}
+
+export interface AnimeFilterOptions {
+    seasons: AnimeSeason[];
+    years: number[];
+    genres: string[];
+    statuses: string[];
+}
+
+export interface AnimeIndexProps {
+    anime: Paginated<AnimeItem>;
+    filters: AnimeFilters;
+    filterOptions: AnimeFilterOptions;
+}
+
+export interface AnimeShowProps {
+    anime: AnimeDetail;
+    airings: AnimeAiring[];
+    linkedShows: AnimeShowLinkedShow[];
+}

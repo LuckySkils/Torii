@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\ShowAnimeSuggestion;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -51,6 +52,8 @@ class HandleInertiaRequests extends Middleware
                 'enabled' => (bool) config('subtracker.notifications.enabled'),
                 'topic' => config('subtracker.notifications.enabled') ? config('subtracker.notifications.ntfy_topic') : null,
             ],
+            // Shows with link suggestions waiting for review ("N shows need review").
+            'pendingLinkSuggestions' => fn () => ShowAnimeSuggestion::query()->distinct()->count('show_id'),
         ]);
     }
 }

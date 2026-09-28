@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { formatLag } from '@/lib/dates';
 import { type SharedData } from '@/types';
 import { type Health } from '@/types/subtracker';
-import { router, usePage } from '@inertiajs/react';
+import { Link, router, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import { RelativeTime } from './relative-time';
 import { TapInfo } from './tap-info';
@@ -30,7 +30,7 @@ function HealthBadge({ ok, label, tooltip }: { ok: boolean; label: string; toolt
 }
 
 export function HealthStrip({ health }: HealthStripProps) {
-    const { notifications } = usePage<SharedData>().props;
+    const { notifications, pendingLinkSuggestions } = usePage<SharedData>().props;
     const [polling, setPolling] = useState(false);
     const [reconciling, setReconciling] = useState(false);
     const [fetchingImages, setFetchingImages] = useState(false);
@@ -130,6 +130,16 @@ export function HealthStrip({ health }: HealthStripProps) {
                     <span className="text-sm text-muted-foreground">notifications off</span>
                 )}
             </div>
+
+            {pendingLinkSuggestions > 0 && (
+                <Link
+                    href="/shows?review=1"
+                    className="inline-flex w-fit items-center gap-1.5 text-sm text-amber-700 hover:underline dark:text-amber-300"
+                >
+                    <span className="size-1.5 rounded-full bg-amber-500" aria-hidden />
+                    {pendingLinkSuggestions} show{pendingLinkSuggestions === 1 ? ' needs' : 's need'} metadata review
+                </Link>
+            )}
 
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                 <div className="flex flex-col gap-1 text-sm text-muted-foreground">

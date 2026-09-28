@@ -71,4 +71,19 @@ class Show extends Model
     {
         return $this->hasOne(ShowImage::class);
     }
+
+    public function animeLink(): HasOne
+    {
+        return $this->hasOne(ShowAnimeLink::class);
+    }
+
+    public function animeSuggestions(): HasMany
+    {
+        return $this->hasMany(ShowAnimeSuggestion::class);
+    }
+
+    public function animeRejections(): HasMany
+    {
+        return $this->hasMany(ShowAnimeRejection::class);
+    }
 }

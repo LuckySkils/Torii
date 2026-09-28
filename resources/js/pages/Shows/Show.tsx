@@ -7,16 +7,20 @@ import { ReleaseCard } from '@/components/subtracker/release-card';
 import { ReleasesTable } from '@/components/subtracker/releases-table';
 import { RuleBadge } from '@/components/subtracker/rule-badge';
 import { SeasonLabel } from '@/components/subtracker/season-label';
+import { ShowAnimePanel } from '@/components/subtracker/show-anime-panel';
 import { ShowPoster } from '@/components/subtracker/show-poster';
 import { TapInfo } from '@/components/subtracker/tap-info';
 import { TrackSwitch } from '@/components/subtracker/track-switch';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useAdaptivePoll } from '@/hooks/use-adaptive-poll';
 import { useRecentActivity } from '@/hooks/use-recent-activity';
 import AppLayout from '@/layouts/app-layout';
+import { airedAhead, airedAheadLabel, newestReleasedEpisode, posterFor } from '@/lib/anime';
 import { type BreadcrumbItem } from '@/types';
 import { type LatestRelease, type RuleState, type ShowShowProps } from '@/types/subtracker';
 import { Head, router } from '@inertiajs/react';
+import { Clock } from 'lucide-react';
 import { useState } from 'react';
 
 const DELETABLE_RULE_STATES: RuleState[] = ['synced', 'disabled', 'error'];
@@ -53,6 +57,13 @@ function ImageStatusLine({ show }: { show: ShowShowProps['show'] }) {
 
 export default function ShowShow({ show, releases }: ShowShowProps) {
     const [refreshing, setRefreshing] = useState(false);
+    // When both exist, the AniList cover is the default poster; the SubsPlease art stays one tap away.
+    const hasBothPosters = Boolean(show.anime?.coverUrl) && show.imageUrl !== null;
+    const [preferSubsPlease, setPreferSubsPlease] = useState(false);
+    const poster = preferSubsPlease ? posterFor({ ...show, anime: null }) : posterFor(show);
+
+    const newestReleased = newestReleasedEpisode(releases);
+    const aired = airedAhead(show.isTracked, show.anime?.episodesAired, newestReleased);
 
     const recentActivity = useRecentActivity();
     const isActive = recentActivity || show.ruleState === 'pending' || show.imageStatus === 'pending';
@@ -96,14 +107,16 @@ export default function ShowShow({ show, releases }: ShowShowProps) {
             <div className="flex h-full flex-1 flex-col gap-4 p-3 sm:p-4">
                 <div className="flex flex-col gap-4 rounded-xl border p-3 sm:p-4 md:flex-row">
                     <div className="mx-auto flex w-full max-w-[min(280px,70vw)] shrink-0 flex-col items-center gap-2 md:mx-0 md:w-80 md:max-w-none">
-                        <ShowPoster
-                            imageUrl={show.imageUrl}
-                            imageStatus={show.imageStatus}
-                            imageWidth={show.imageWidth}
-                            imageHeight={show.imageHeight}
-                            name={show.name}
-                            className="w-full"
-                        />
+                        <ShowPoster {...poster} name={show.name} className="w-full" />
+                        {hasBothPosters && (
+                            <button
+                                type="button"
+                                className="cursor-pointer text-xs text-muted-foreground underline-offset-2 hover:underline"
+                                onClick={() => setPreferSubsPlease((value) => !value)}
+                            >
+                                {preferSubsPlease ? 'Showing SubsPlease art · show AniList cover' : 'Showing AniList cover · show SubsPlease art'}
+                            </button>
+                        )}
                         <Button variant="outline" size="sm" disabled={refreshing} onClick={reloadImage}>
                             {refreshing ? 'Reloading…' : 'Reload image'}
                         </Button>
@@ -150,6 +163,12 @@ export default function ShowShow({ show, releases }: ShowShowProps) {
                                 hasBatch={show.hasBatch}
                             />
                             <RuleBadge trackingMode={show.trackingMode} state={show.ruleState} error={show.ruleError} />
+                            {aired && (
+                                <Badge variant="outline" className="gap-1.5 border-sky-500/40 font-medium text-sky-700 dark:text-sky-300">
+                                    <Clock className="size-3" />
+                                    {airedAheadLabel(aired)}
+                                </Badge>
+                            )}
                         </div>
 
                         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -188,6 +207,8 @@ export default function ShowShow({ show, releases }: ShowShowProps) {
                         </div>
                     </div>
                 </div>
+
+                <ShowAnimePanel show={show} currentEpisode={newestReleased} />
 
                 <section className="flex flex-col gap-2">
                     <h2 className="text-lg font-medium">Releases</h2>

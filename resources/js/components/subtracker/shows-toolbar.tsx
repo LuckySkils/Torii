@@ -3,6 +3,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { cn } from '@/lib/utils';
 import { type ShowFilters } from '@/types/subtracker';
 import { router } from '@inertiajs/react';
 import { LayoutGrid, List, Loader2, SlidersHorizontal } from 'lucide-react';
@@ -11,8 +12,31 @@ import { useEffect, useRef, useState } from 'react';
 interface ShowsToolbarProps {
     filters: ShowFilters;
     years: number[];
+    /** Shows needing metadata review, whatever the other filters. */
+    reviewCount: number;
     view: 'grid' | 'list';
     onViewChange: (view: 'grid' | 'list') => void;
+}
+
+/** "Needs review · N" — a toggle for /shows?review=1, combinable with the other filters. */
+function ReviewToggle({ active, count, onToggle, className }: { active: boolean; count: number; onToggle: () => void; className?: string }) {
+    return (
+        <Button
+            type="button"
+            variant="outline"
+            aria-pressed={active}
+            onClick={onToggle}
+            className={cn(
+                'gap-1.5',
+                active && 'border-amber-500/60 bg-amber-500/10 text-amber-800 hover:bg-amber-500/15 dark:text-amber-200',
+                className,
+            )}
+        >
+            <span className={cn('size-1.5 rounded-full', active ? 'bg-amber-500' : 'bg-amber-500/70')} aria-hidden />
+            Needs review
+            <span className="text-muted-foreground tabular-nums">{count}</span>
+        </Button>
+    );
 }
 
 const SEARCH_DEBOUNCE_MS = 400;
@@ -28,10 +52,11 @@ function toQueryParams(filters: ShowFilters): Record<string, string> {
         sort: filters.sort,
         season: filters.season ?? '',
         year: filters.year === null ? '' : String(filters.year),
+        review: filters.review ? '1' : '',
     };
 }
 
-export function ShowsToolbar({ filters, years, view, onViewChange }: ShowsToolbarProps) {
+export function ShowsToolbar({ filters, years, reviewCount, view, onViewChange }: ShowsToolbarProps) {
     const [search, setSearch] = useState(filters.q);
     const [searching, setSearching] = useState(false);
     const [filtersOpen, setFiltersOpen] = useState(false);
@@ -92,11 +117,12 @@ export function ShowsToolbar({ filters, years, view, onViewChange }: ShowsToolba
 
     function clearFiltersInSheet() {
         clearTimeout(debounceRef.current);
-        navigate({ q: '', tracked: 'all', sort: filters.sort, season: null, year: null }, false);
+        navigate({ q: '', tracked: 'all', sort: filters.sort, season: null, year: null, review: false }, false);
         setFiltersOpen(false);
     }
 
-    const activeFilterCount = (filters.tracked !== 'all' ? 1 : 0) + (filters.season !== null ? 1 : 0) + (filters.year !== null ? 1 : 0);
+    const activeFilterCount =
+        (filters.tracked !== 'all' ? 1 : 0) + (filters.season !== null ? 1 : 0) + (filters.year !== null ? 1 : 0) + (filters.review ? 1 : 0);
 
     return (
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
@@ -197,6 +223,13 @@ export function ShowsToolbar({ filters, years, view, onViewChange }: ShowsToolba
                                 </Select>
                             </div>
 
+                            {(reviewCount > 0 || filters.review) && (
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-sm font-medium">Metadata</label>
+                                    <ReviewToggle className="w-full" active={filters.review} count={reviewCount} onToggle={() => submit({ review: !filters.review })} />
+                                </div>
+                            )}
+
                             <Button variant="outline" onClick={clearFiltersInSheet}>
                                 Clear filters
                             </Button>
@@ -271,6 +304,9 @@ export function ShowsToolbar({ filters, years, view, onViewChange }: ShowsToolba
                     <SelectItem value="premiered">Premiere (newest)</SelectItem>
                 </SelectContent>
             </Select>
+            {(reviewCount > 0 || filters.review) && (
+                <ReviewToggle className="hidden sm:inline-flex" active={filters.review} count={reviewCount} onToggle={() => submit({ review: !filters.review })} />
+            )}
         </div>
     );
 }

@@ -2,7 +2,9 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatDelay } from '@/lib/dates';
 import { type DashboardRelease } from '@/types/subtracker';
+import { latestEpisodeNumber, posterFor } from '@/lib/anime';
 import { Link } from '@inertiajs/react';
+import { AnimeLinkIndicator } from './anime-link-indicator';
 import { CopyLinkButton } from './copy-link-button';
 import { DispatchBadge } from './dispatch-badge';
 import { DownloadButton } from './download-button';
@@ -23,7 +25,7 @@ export function ReleaseThumb({ release, className = 'w-10' }: { release: Dashboa
 
     return (
         <Link href={`/shows/${release.show.id}`} className="block shrink-0" tabIndex={-1} aria-hidden>
-            <ShowPoster imageUrl={release.show.imageUrl} imageStatus={release.show.imageStatus} name={release.show.name} className={className} />
+            <ShowPoster {...posterFor(release.show)} name={release.show.name} className={className} />
         </Link>
     );
 }
@@ -67,8 +69,7 @@ export function LatestReleasesTable({ releases }: LatestReleasesTableProps) {
                             <TableCell className="py-2">
                                 {release.show ? (
                                     <PosterHoverPreview
-                                        imageUrl={release.show.imageUrl}
-                                        imageStatus={release.show.imageStatus}
+                                        {...posterFor(release.show)}
                                         name={release.show.name}
                                         thumbClassName="w-10"
                                         href={`/shows/${release.show.id}`}
@@ -83,7 +84,10 @@ export function LatestReleasesTable({ releases }: LatestReleasesTableProps) {
                                         <Link href={`/shows/${release.show.id}`} className="line-clamp-2 font-medium hover:underline">
                                             {release.show.name}
                                         </Link>
-                                        {release.isNewShow && <NewShowBadge />}
+                                        <span className="flex flex-wrap items-center gap-1">
+                                            {release.isNewShow && <NewShowBadge />}
+                                            <AnimeLinkIndicator show={release.show} currentEpisode={latestEpisodeNumber(release)} />
+                                        </span>
                                     </div>
                                 ) : (
                                     <Badge variant="outline">unparsed</Badge>
