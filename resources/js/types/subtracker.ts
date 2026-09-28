@@ -45,6 +45,16 @@ export interface Health {
     pollMode: PollMode;
     driver: DriverMode;
     delay: FeedDelay;
+    /** One-time data tasks; null once all have completed. */
+    bootstrap: BootstrapProgress | null;
+}
+
+export type BootstrapTaskState = 'pending' | 'running' | 'failed' | 'done';
+
+export interface BootstrapProgress {
+    total: number;
+    completed: number;
+    tasks: { key: string; label: string; state: BootstrapTaskState; error: string | null }[];
 }
 
 export interface ReleaseShowRef {
@@ -173,12 +183,27 @@ export interface ShowFilters {
     year: number | null;
     /** review=1: only shows with link suggestions waiting; combines with the rest. */
     review: boolean;
+    /** format[]: linked anime has any of these (AniList formats, uppercase). */
+    format: string[];
+    /** genres_include[]: linked anime has all of these. */
+    genresInclude: string[];
+    /** genres_exclude[]: linked anime has none of these (unlinked shows stay). */
+    genresExclude: string[];
+}
+
+/** AnimeFacets row: a filter value with how many items have it (over everything, not the current result). */
+export interface FacetOption {
+    value: string;
+    count: number;
 }
 
 export interface FilterOptions {
     years: number[];
     /** Shows with pending suggestions, whatever the other filters. */
     reviewCount: number;
+    /** Counted over shows' linked anime. */
+    formats: FacetOption[];
+    genres: FacetOption[];
 }
 
 export interface ShowsIndexProps {
@@ -230,6 +255,7 @@ export interface AnimeLinkFull extends AnimeLinkSummary {
     nextAiringAt: string | null;
     nextEpisode: number | null;
     siteUrl: string | null;
+    airingWindow: AiringWindow;
     confidence: number;
 }
 
@@ -314,6 +340,23 @@ export interface AnimeDetail extends AnimeItem {
     externalIds: Record<string, string>;
     primaryProvider: string;
     syncedAt: string;
+    airingWindow: AiringWindow;
+}
+
+export interface AiringWindowEntry {
+    episode: number;
+    airsAt: string;
+}
+
+/**
+ * AiringWindow — the three airings around now. `current` is the earliest at or
+ * after now (due next, or airing right now), `previous` the latest before now,
+ * `next` the one after current. Any may be null.
+ */
+export interface AiringWindow {
+    previous: AiringWindowEntry | null;
+    current: AiringWindowEntry | null;
+    next: AiringWindowEntry | null;
 }
 
 export interface AnimeAiring {
@@ -334,17 +377,24 @@ export interface AnimeShowLinkedShow {
 }
 
 export interface AnimeFilters {
+    q: string;
     season: AnimeSeason | null;
     year: number | null;
     status: string | null;
-    genre: string | null;
     linked: 'all' | 'yes' | 'no';
+    /** format[]: any of these. */
+    format: string[];
+    /** genres_include[]: all of these (the old `genre=` lands here too). */
+    genresInclude: string[];
+    /** genres_exclude[]: none of these. */
+    genresExclude: string[];
 }
 
 export interface AnimeFilterOptions {
     seasons: AnimeSeason[];
     years: number[];
-    genres: string[];
+    formats: FacetOption[];
+    genres: FacetOption[];
     statuses: string[];
 }
 
@@ -356,6 +406,7 @@ export interface AnimeIndexProps {
 
 export interface AnimeShowProps {
     anime: AnimeDetail;
+    /** Newest first. */
     airings: AnimeAiring[];
     linkedShows: AnimeShowLinkedShow[];
 }

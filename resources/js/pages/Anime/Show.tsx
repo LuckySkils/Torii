@@ -1,3 +1,4 @@
+import { AiringWindowStrip } from '@/components/subtracker/airing-window';
 import { AnimeDescription } from '@/components/subtracker/anime-description';
 import { AnimeFacts, GenreBadges, NextEpisodeLine } from '@/components/subtracker/anime-facts';
 import { RelativeTime } from '@/components/subtracker/relative-time';
@@ -8,7 +9,7 @@ import AppLayout from '@/layouts/app-layout';
 import { animeSubtitle, animeTitle, coverPoster } from '@/lib/anime';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
-import { type AnimeAiring, type AnimeShowProps } from '@/types/subtracker';
+import { type AiringWindow, type AnimeAiring, type AnimeShowProps } from '@/types/subtracker';
 import { Head, Link } from '@inertiajs/react';
 import { Check, ExternalLink, Link2 } from 'lucide-react';
 import { useState } from 'react';
@@ -30,15 +31,15 @@ export default function AnimeShow({ anime, airings, linkedShows }: AnimeShowProp
             <Head title={title} />
             <div className="flex h-full flex-1 flex-col gap-4 p-3 sm:p-4">
                 <div className="flex flex-col gap-4 rounded-xl border p-3 sm:p-4 md:flex-row">
-                    <div className="mx-auto w-full max-w-[min(240px,65vw)] shrink-0 md:mx-0 md:w-56 md:max-w-none">
+                    <div className="mx-auto w-full max-w-[min(240px,65vw)] shrink-0 md:mx-0 md:w-56 md:max-w-none large:md:w-72 large:xl:w-80 large:3xl:w-96">
                         <ShowPoster {...coverPoster(anime)} name={title} className="w-full" />
                     </div>
 
-                    <div className="flex min-w-0 flex-1 flex-col gap-3">
+                    <div className="flex min-w-0 flex-1 flex-col gap-3 large:md:gap-4">
                         <div className="flex flex-col gap-0.5">
-                            <h1 className="text-xl leading-tight font-medium break-words">{title}</h1>
-                            {subtitle && <p className="text-sm break-words text-muted-foreground">{subtitle}</p>}
-                            {anime.titleNative && <p className="text-sm break-words text-muted-foreground">{anime.titleNative}</p>}
+                            <h1 className="text-xl leading-tight font-medium break-words large:md:text-3xl">{title}</h1>
+                            {subtitle && <p className="text-sm break-words text-muted-foreground large:md:text-lg">{subtitle}</p>}
+                            {anime.titleNative && <p className="text-sm break-words text-muted-foreground large:md:text-base">{anime.titleNative}</p>}
                         </div>
 
                         <AnimeFacts
@@ -59,7 +60,7 @@ export default function AnimeShow({ anime, airings, linkedShows }: AnimeShowProp
                                 href={anime.siteUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex w-fit items-center gap-1 text-sm font-medium hover:underline"
+                                className="inline-flex w-fit items-center gap-1 text-sm font-medium hover:underline large:md:text-base"
                             >
                                 View on AniList
                                 <ExternalLink className="size-3.5" />
@@ -95,19 +96,19 @@ export default function AnimeShow({ anime, airings, linkedShows }: AnimeShowProp
                     )}
                 </section>
 
-                <AiringsSection airings={airings} />
+                <AiringsSection airings={airings} airingWindow={anime.airingWindow} />
             </div>
         </AppLayout>
     );
 }
 
-function AiringsSection({ airings }: { airings: AnimeAiring[] }) {
+function AiringsSection({ airings, airingWindow }: { airings: AnimeAiring[]; airingWindow: AiringWindow }) {
     const [showAll, setShowAll] = useState(false);
     const now = Date.now();
-    // Sorted by episode ascending, so the most recent (and any upcoming) are at the end.
-    const visible = showAll ? airings : airings.slice(-RECENT_AIRINGS);
-    const nextIndex = airings.findIndex((airing) => new Date(airing.airsAt).getTime() > now);
-    const nextEpisode = nextIndex === -1 ? null : airings[nextIndex].episode;
+    // Newest first, so the latest (and any upcoming) episodes lead the list.
+    const visible = showAll ? airings : airings.slice(0, RECENT_AIRINGS);
+    // The backend's window decides what's next up, so list and strip always agree.
+    const nextEpisode = airingWindow.current?.episode ?? null;
 
     return (
         <section className="flex flex-col gap-2">
@@ -120,10 +121,12 @@ function AiringsSection({ airings }: { airings: AnimeAiring[] }) {
                 )}
             </div>
 
+            <AiringWindowStrip airingWindow={airingWindow} className="large:md:max-w-3xl" />
+
             {airings.length === 0 ? (
                 <p className="rounded-xl border p-4 text-sm text-muted-foreground">No air dates known yet. They're filled in by the daily airing sync.</p>
             ) : (
-                <div className="max-h-[28rem] overflow-y-auto rounded-xl border">
+                <div className="max-h-[28rem] overflow-y-auto rounded-xl border large:md:max-h-[40rem]">
                     <ol className="divide-y">
                         {visible.map((airing) => {
                             const past = new Date(airing.airsAt).getTime() <= now;
@@ -132,7 +135,7 @@ function AiringsSection({ airings }: { airings: AnimeAiring[] }) {
                             return (
                                 <li
                                     key={airing.episode}
-                                    className={cn('flex items-center gap-3 px-3 py-2 text-sm', past && 'text-muted-foreground', isNext && 'bg-sky-500/5')}
+                                    className={cn('flex items-center gap-3 px-3 py-2 text-sm large:md:py-2.5 large:md:text-base', past && 'text-muted-foreground', isNext && 'bg-sky-500/5')}
                                 >
                                     <span className={cn('w-16 shrink-0 font-medium tabular-nums', !past && 'text-foreground')}>Ep {airing.episode}</span>
                                     <span className="min-w-0 flex-1">

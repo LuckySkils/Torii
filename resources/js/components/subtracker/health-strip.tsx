@@ -2,8 +2,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatLag } from '@/lib/dates';
 import { type SharedData } from '@/types';
-import { type Health } from '@/types/subtracker';
+import { type BootstrapProgress, type BootstrapTaskState, type Health } from '@/types/subtracker';
 import { Link, router, usePage } from '@inertiajs/react';
+import { Check, Circle, Loader2, X } from 'lucide-react';
 import { useState } from 'react';
 import { RelativeTime } from './relative-time';
 import { TapInfo } from './tap-info';
@@ -26,6 +27,54 @@ function HealthBadge({ ok, label, tooltip }: { ok: boolean; label: string; toolt
         >
             {tooltip}
         </TapInfo>
+    );
+}
+
+const TASK_ICONS: Record<BootstrapTaskState, { icon: typeof Check; className: string; label: string }> = {
+    done: { icon: Check, className: 'text-green-600 dark:text-green-400', label: 'done' },
+    running: { icon: Loader2, className: 'animate-spin text-sky-600 dark:text-sky-400', label: 'running' },
+    pending: { icon: Circle, className: 'text-muted-foreground', label: 'waiting' },
+    failed: { icon: X, className: 'text-destructive', label: 'failed' },
+};
+
+/** "Initial sync in progress (2 of 5)", with the one-time tasks and their state in a tap-info. Gone once all are done. */
+function BootstrapLine({ progress }: { progress: BootstrapProgress }) {
+    const failed = progress.tasks.filter((task) => task.state === 'failed').length;
+
+    return (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+            <TapInfo
+                trigger={
+                    <button type="button" className="inline-flex cursor-pointer items-center gap-2 bg-transparent p-0 text-left">
+                        <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                        <span className="underline decoration-dotted underline-offset-2">
+                            Initial sync in progress ({progress.completed} of {progress.total})
+                        </span>
+                        <span className="h-1 w-16 overflow-hidden rounded-full bg-muted" aria-hidden>
+                            <span className="block h-full rounded-full bg-sky-500/70" style={{ width: `${(progress.completed / Math.max(progress.total, 1)) * 100}%` }} />
+                        </span>
+                    </button>
+                }
+            >
+                <p className="mb-2 text-xs text-muted-foreground">One-time tasks that fill in data after a fresh install. Nothing to do; they run in the background.</p>
+                <ul className="flex flex-col gap-1.5">
+                    {progress.tasks.map((task) => {
+                        const { icon: Icon, className, label } = TASK_ICONS[task.state];
+
+                        return (
+                            <li key={task.key} className="flex items-start gap-2">
+                                <Icon className={`mt-0.5 size-3.5 shrink-0 ${className}`} aria-label={label} />
+                                <span className="flex min-w-0 flex-col">
+                                    <span className={task.state === 'done' ? 'text-muted-foreground' : undefined}>{task.label}</span>
+                                    {task.error && <span className="text-xs break-words text-destructive">{task.error} · retried on the next start</span>}
+                                </span>
+                            </li>
+                        );
+                    })}
+                </ul>
+            </TapInfo>
+            {failed > 0 && <span className="text-destructive">· {failed} failed</span>}
+        </div>
     );
 }
 
@@ -140,6 +189,8 @@ export function HealthStrip({ health }: HealthStripProps) {
                     {pendingLinkSuggestions} show{pendingLinkSuggestions === 1 ? ' needs' : 's need'} metadata review
                 </Link>
             )}
+
+            {health.bootstrap && <BootstrapLine progress={health.bootstrap} />}
 
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                 <div className="flex flex-col gap-1 text-sm text-muted-foreground">

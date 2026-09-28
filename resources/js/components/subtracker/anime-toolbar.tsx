@@ -1,47 +1,60 @@
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { type FilterNavigation, type QueryParams } from '@/hooks/use-filter-navigation';
 import { animeSeasonLabel, statusLabel } from '@/lib/anime';
 import { cn } from '@/lib/utils';
 import { type AnimeFilterOptions, type AnimeFilters } from '@/types/subtracker';
-import { router } from '@inertiajs/react';
-import { SlidersHorizontal } from 'lucide-react';
+import { Loader2, SlidersHorizontal } from 'lucide-react';
 import { useState } from 'react';
+import { FormatFilter, GenreFilter } from './facet-filters';
 
 /** Radix Select rejects "" as an item value; this stands in for "any" and becomes an empty param. */
 const ANY = 'any';
 
-function toQueryParams(filters: AnimeFilters): Record<string, string> {
+export function animeQueryParams(filters: AnimeFilters): QueryParams {
     // Always explicit: the backend treats a *missing* season/year as "current season",
     // and an *empty* one as "any".
     return {
+        q: filters.q,
         season: filters.season ?? '',
         year: filters.year === null ? '' : String(filters.year),
         status: filters.status ?? '',
-        genre: filters.genre ?? '',
         linked: filters.linked,
+        format: filters.format,
+        genres_include: filters.genresInclude,
+        genres_exclude: filters.genresExclude,
     };
 }
 
-export function navigateAnime(filters: AnimeFilters) {
-    router.get('/anime', toQueryParams(filters), { preserveState: true, preserveScroll: true, replace: true });
-}
-
-export const ANY_FILTERS: AnimeFilters = { season: null, year: null, status: null, genre: null, linked: 'all' };
+export const ANY_FILTERS: AnimeFilters = {
+    q: '',
+    season: null,
+    year: null,
+    status: null,
+    linked: 'all',
+    format: [],
+    genresInclude: [],
+    genresExclude: [],
+};
 
 interface AnimeToolbarProps {
     filters: AnimeFilters;
     options: AnimeFilterOptions;
+    nav: FilterNavigation<AnimeFilters>;
 }
 
-export function AnimeToolbar({ filters, options }: AnimeToolbarProps) {
+export function AnimeToolbar({ filters, options, nav }: AnimeToolbarProps) {
     const [sheetOpen, setSheetOpen] = useState(false);
+    const set = nav.submit;
 
-    function set(overrides: Partial<AnimeFilters>) {
-        navigateAnime({ ...filters, ...overrides });
-    }
-
-    const activeCount = [filters.season, filters.year, filters.status, filters.genre].filter((value) => value !== null).length + (filters.linked !== 'all' ? 1 : 0);
+    const activeCount =
+        [filters.season, filters.year, filters.status].filter((value) => value !== null).length +
+        (filters.linked !== 'all' ? 1 : 0) +
+        filters.format.length +
+        filters.genresInclude.length +
+        filters.genresExclude.length;
 
     const selects = (fullWidth: boolean) => [
         <FilterSelect
@@ -75,16 +88,6 @@ export function AnimeToolbar({ filters, options }: AnimeToolbarProps) {
             onChange={(value) => set({ status: value })}
         />,
         <FilterSelect
-            key="genre"
-            label="Genre"
-            fullWidth={fullWidth}
-            widthClass="w-36"
-            value={filters.genre}
-            anyLabel="All genres"
-            options={options.genres.map((genre) => ({ value: genre, label: genre }))}
-            onChange={(value) => set({ genre: value })}
-        />,
-        <FilterSelect
             key="linked"
             label="Linked"
             fullWidth={fullWidth}
@@ -99,8 +102,21 @@ export function AnimeToolbar({ filters, options }: AnimeToolbarProps) {
         />,
     ];
 
+    const setGenres = (genresInclude: string[], genresExclude: string[]) => set({ genresInclude, genresExclude });
+
     return (
-        <>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="relative w-full sm:w-56">
+                <Input
+                    placeholder="Search titles…"
+                    value={nav.search}
+                    onChange={(event) => nav.changeSearch(event.target.value)}
+                    className={nav.searching ? 'pr-8' : undefined}
+                    aria-label="Search anime titles"
+                />
+                {nav.searching && <Loader2 className="absolute top-1/2 right-2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />}
+            </div>
+
             <div className="flex items-center gap-2 sm:hidden">
                 <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
                     <SheetTrigger asChild>
@@ -120,10 +136,24 @@ export function AnimeToolbar({ filters, options }: AnimeToolbarProps) {
                         </SheetHeader>
                         <div className="flex flex-col gap-4 py-4">
                             {selects(true)}
+                            <div className="flex flex-col gap-1.5">
+                                <span className="text-sm font-medium">Format</span>
+                                <FormatFilter inline options={options.formats} selected={filters.format} onChange={(format) => set({ format })} />
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                                <span className="text-sm font-medium">Genres</span>
+                                <GenreFilter
+                                    inline
+                                    options={options.genres}
+                                    include={filters.genresInclude}
+                                    exclude={filters.genresExclude}
+                                    onChange={setGenres}
+                                />
+                            </div>
                             <Button
                                 variant="outline"
                                 onClick={() => {
-                                    navigateAnime(ANY_FILTERS);
+                                    nav.navigate(ANY_FILTERS);
                                     setSheetOpen(false);
                                 }}
                             >
@@ -134,8 +164,12 @@ export function AnimeToolbar({ filters, options }: AnimeToolbarProps) {
                 </Sheet>
             </div>
 
-            <div className="hidden flex-wrap items-center gap-2 sm:flex">{selects(false)}</div>
-        </>
+            <div className="hidden flex-wrap items-center gap-2 sm:flex">
+                {selects(false)}
+                <FormatFilter className="w-36" options={options.formats} selected={filters.format} onChange={(format) => set({ format })} />
+                <GenreFilter className="w-40" options={options.genres} include={filters.genresInclude} exclude={filters.genresExclude} onChange={setGenres} />
+            </div>
+        </div>
     );
 }
 

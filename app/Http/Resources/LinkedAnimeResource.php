@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Resources;
 
 use App\Models\ShowAnimeLink;
+use App\Services\Metadata\AiringWindow;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -70,6 +71,7 @@ final class LinkedAnimeResource extends JsonResource
             'nextAiringAt' => $anime->nextAiring?->airs_at->toIso8601String(),
             'nextEpisode' => $anime->nextAiring?->episode,
             'siteUrl' => $anime->site_url,
+            'airingWindow' => app(AiringWindow::class)->for($anime->id, now()),
             'confidence' => $this->confidence,
         ];
     }

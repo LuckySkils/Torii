@@ -56,11 +56,11 @@ export function AnimeDescription({ html, className }: { html: string; className?
 
     return (
         <div className={cn('flex flex-col items-start gap-1', className)}>
-            <p ref={ref} className={cn('text-sm leading-relaxed break-words text-muted-foreground', !expanded && 'line-clamp-4')}>
+            <p ref={ref} className={cn('text-sm leading-relaxed break-words text-muted-foreground large:md:max-w-[75ch] large:md:text-base', !expanded && 'line-clamp-4 large:md:line-clamp-6')}>
                 {nodes}
             </p>
             {(overflows || expanded) && (
-                <button type="button" className="cursor-pointer text-sm font-medium hover:underline" onClick={() => setExpanded((value) => !value)}>
+                <button type="button" className="cursor-pointer text-sm font-medium hover:underline large:md:text-base" onClick={() => setExpanded((value) => !value)}>
                     {expanded ? 'less' : 'more'}
                 </button>
             )}

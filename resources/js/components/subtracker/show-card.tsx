@@ -46,7 +46,7 @@ export function ShowCard({ show, selected, onToggleSelect, selectionMode = false
     }
 
     return (
-        <div className="group flex flex-col gap-2 rounded-lg border p-2">
+        <div className="group flex flex-col gap-2 rounded-lg border p-2 large:md:p-2.5">
             <div className="relative">
                 {selectionMode ? (
                     <button
@@ -124,7 +124,7 @@ export function ShowCard({ show, selected, onToggleSelect, selectionMode = false
             {selectionMode ? (
                 <button
                     type="button"
-                    className="cursor-pointer bg-transparent p-0 text-left text-sm leading-tight font-medium"
+                    className="cursor-pointer bg-transparent p-0 text-left text-sm leading-tight font-medium large:md:text-base"
                     onClick={() => onToggleSelect(!selected)}
                 >
                     <span className="line-clamp-2">{show.name}</span>
@@ -132,7 +132,7 @@ export function ShowCard({ show, selected, onToggleSelect, selectionMode = false
             ) : (
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Link href={`/shows/${show.id}`} className="line-clamp-2 text-sm leading-tight font-medium hover:underline">
+                        <Link href={`/shows/${show.id}`} className="line-clamp-2 text-sm leading-tight font-medium hover:underline large:md:text-base">
                             {show.name}
                         </Link>
                     </TooltipTrigger>
@@ -140,7 +140,7 @@ export function ShowCard({ show, selected, onToggleSelect, selectionMode = false
                 </Tooltip>
             )}
 
-            <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+            <div className="flex flex-col gap-0.5 text-xs text-muted-foreground large:md:text-sm">
                 <div className="truncate">
                     <LatestEpisodeLabel latest={show.latest} />
                 </div>

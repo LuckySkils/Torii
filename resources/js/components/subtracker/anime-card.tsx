@@ -11,19 +11,19 @@ export function AnimeCard({ anime }: { anime: AnimeItem }) {
     const [firstShow, ...otherShows] = anime.linkedShows;
 
     return (
-        <div className="flex min-w-0 flex-col gap-2 rounded-lg border p-2">
+        <div className="flex min-w-0 flex-col gap-2 rounded-lg border p-2 large:md:p-2.5">
             <Link href={`/anime/${anime.id}`} className="flex flex-col gap-2">
                 <ShowPoster {...coverPoster(anime)} name={title} className="w-full" />
-                <span className="line-clamp-2 text-sm leading-tight font-medium hover:underline" title={title}>
+                <span className="line-clamp-2 text-sm leading-tight font-medium hover:underline large:md:text-base" title={title}>
                     {title}
                 </span>
             </Link>
-            {facts && <span className="truncate text-xs text-muted-foreground">{facts}</span>}
+            {facts && <span className="truncate text-xs text-muted-foreground large:md:text-sm">{facts}</span>}
             {firstShow && (
                 <Link
                     href={`/shows/${firstShow.id}`}
                     className={cn(
-                        'inline-flex max-w-full min-w-0 items-center gap-1 self-start rounded-md border px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground',
+                        'inline-flex max-w-full min-w-0 items-center gap-1 self-start rounded-md border px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground large:md:text-xs',
                         TOUCH_TARGET_SM,
                     )}
                     title={`Linked to ${anime.linkedShows.map((show) => show.name).join(', ')}`}

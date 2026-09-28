@@ -8,6 +8,7 @@ use App\Enums\ImageStatus;
 use App\Jobs\FetchShowImage;
 use App\Models\Show;
 use App\Models\ShowImage;
+use App\Services\SubsPlease\PosterFetchSpacing;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -48,7 +49,7 @@ class ImageController extends Controller
         $shows = Show::whereIn('image_status', [ImageStatus::None, ImageStatus::Missing, ImageStatus::Error])->get();
 
         foreach ($shows as $i => $show) {
-            FetchShowImage::dispatch($show->id)->delay(now()->addSeconds($i * 3));
+            FetchShowImage::dispatch($show->id)->delay(now()->addSeconds($i * PosterFetchSpacing::SECONDS));
         }
 
         return back()->with('success', "Fetching images for {$shows->count()} shows.");

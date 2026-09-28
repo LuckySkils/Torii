@@ -6,16 +6,24 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\ReleaseResource;
 use App\Http\Resources\ShowResource;
+use App\Models\Anime;
 use App\Models\Release;
 use App\Models\Show;
 use App\Models\ShowAnimeSuggestion;
+use App\Services\Metadata\AnimeFacets;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class ShowController extends Controller
 {
-    public function index(Request $request): Response
+    /**
+     * Besides its own filters, `format[]`, `genres_include[]` and `genres_exclude[]`
+     * filter through the linked anime, exactly as on /anime. Format and include
+     * need a link; exclude drops only shows whose linked anime has an excluded
+     * genre, so unlinked shows stay listed.
+     */
+    public function index(Request $request, AnimeFacets $facets): Response
     {
         $search = trim((string) $request->query('q', ''));
         $tracked = (string) $request->query('tracked', 'all');
@@ -24,6 +32,9 @@ class ShowController extends Controller
         $year = $this->nullableInt($request->query('year'));
         // review=1: only shows with link suggestions waiting for a decision.
         $review = $request->boolean('review');
+        $formats = array_values(array_intersect(array_map('strtoupper', $this->listParam($request, 'format')), Anime::FORMATS));
+        $include = $this->listParam($request, 'genres_include');
+        $exclude = $this->listParam($request, 'genres_exclude');
 
         $query = Show::query()->with([
             'latestRelease',
@@ -52,6 +63,18 @@ class ShowController extends Controller
             $query->whereHas('animeSuggestions');
         }
 
+        if ($formats !== []) {
+            $query->whereHas('animeLink.anime', fn ($anime) => $anime->whereIn('format', $formats));
+        }
+
+        if ($include !== []) {
+            $query->whereHas('animeLink.anime', fn ($anime) => $anime->withAllGenres($include));
+        }
+
+        if ($exclude !== []) {
+            $query->whereDoesntHave('animeLink.anime', fn ($anime) => $anime->withAnyGenre($exclude));
+        }
+
         match ($sort) {
             'last_seen' => $query->orderByDesc('last_seen_at'),
             'premiered' => $query->orderByRaw('premiered_at DESC NULLS LAST'),
@@ -67,6 +90,9 @@ class ShowController extends Controller
                 'season' => $season,
                 'year' => $year,
                 'review' => $review,
+                'format' => $formats,
+                'genresInclude' => $include,
+                'genresExclude' => $exclude,
             ],
             'filterOptions' => [
                 'years' => Show::query()
@@ -77,6 +103,9 @@ class ShowController extends Controller
                     ->all(),
                 // How many shows the review filter would show, whatever the other filters.
                 'reviewCount' => ShowAnimeSuggestion::query()->distinct()->count('show_id'),
+                // Counted over shows' linked anime.
+                'formats' => $facets->formats(linkedShowsOnly: true),
+                'genres' => $facets->genres(linkedShowsOnly: true),
             ],
         ]);
     }

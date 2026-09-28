@@ -15,12 +15,22 @@ class AnimeSyncSeason extends Command
         {season? : WINTER, SPRING, SUMMER or FALL (default: the current season)}
         {year? : Season year (default: the current season\'s year)}
         {--next : Sync the season after the current one instead}
-        {--all-linked : Also refresh every anime linked to a show}';
+        {--all-linked : Also refresh every anime linked to a show}
+        {--weekly : The scheduled run: previous, current and next season plus every linked anime}';
 
     protected $description = 'Queue a sync of one season of anime metadata from the metadata provider';
 
     public function handle(AnimeSeasons $seasons): int
     {
+        if ($this->option('weekly')) {
+            $job = SyncAnimeSeasons::weekly(allLinked: true);
+            SyncAnimeSeasons::dispatch($job->seasons, $job->allLinked);
+
+            $this->info('Queued anime sync for '.collect($job->seasons)->map(fn (array $s) => "{$s['season']} {$s['year']}")->implode(', ').' plus all linked anime.');
+
+            return self::SUCCESS;
+        }
+
         $seasonArgument = $this->argument('season');
 
         if ($seasonArgument !== null) {

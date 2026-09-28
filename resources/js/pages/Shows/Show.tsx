@@ -106,7 +106,7 @@ export default function ShowShow({ show, releases }: ShowShowProps) {
             <Head title={show.name} />
             <div className="flex h-full flex-1 flex-col gap-4 p-3 sm:p-4">
                 <div className="flex flex-col gap-4 rounded-xl border p-3 sm:p-4 md:flex-row">
-                    <div className="mx-auto flex w-full max-w-[min(280px,70vw)] shrink-0 flex-col items-center gap-2 md:mx-0 md:w-80 md:max-w-none">
+                    <div className="mx-auto flex w-full max-w-[min(280px,70vw)] shrink-0 flex-col items-center gap-2 md:mx-0 md:w-80 md:max-w-none large:xl:w-96 large:3xl:w-[28rem]">
                         <ShowPoster {...poster} name={show.name} className="w-full" />
                         {hasBothPosters && (
                             <button
@@ -127,7 +127,7 @@ export default function ShowShow({ show, releases }: ShowShowProps) {
 
                     <div className="flex min-w-0 flex-1 flex-col gap-3">
                         <div className="flex flex-wrap items-center gap-3">
-                            <h1 className="min-w-0 flex-1 text-xl font-medium break-words">{show.name}</h1>
+                            <h1 className="min-w-0 flex-1 text-xl font-medium break-words large:md:text-3xl">{show.name}</h1>
 
                             <div className="hidden items-center gap-2 md:flex">
                                 <QueueMissingButton showId={show.id} downloadableCount={show.downloadableCount} />
@@ -171,12 +171,12 @@ export default function ShowShow({ show, releases }: ShowShowProps) {
                             )}
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground large:md:text-base">
                             <LatestEpisodeLabel latest={latest} />
                             <SeasonLabel season={show.season} seasonYear={show.seasonYear} premiereSource={show.premiereSource} />
                         </div>
 
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-sm text-muted-foreground large:md:text-base">
                             First seen: <RelativeTime iso={show.firstSeenAt} /> · Last seen: <RelativeTime iso={show.lastSeenAt} /> ·{' '}
                             {show.queuedCount} release{show.queuedCount === 1 ? '' : 's'} queued · {show.downloadedCount} downloaded
                         </p>

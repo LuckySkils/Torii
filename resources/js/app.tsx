@@ -5,10 +5,14 @@ import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
 import { route as routeFn } from 'ziggy-js';
 import { initializeTheme } from './hooks/use-appearance';
+import { initializeDensity } from './hooks/use-density';
 
 declare global {
     const route: typeof routeFn;
 }
+
+// Before the first render, so the page never paints in the wrong density.
+initializeDensity();
 
 const appName = JSON.parse(document.getElementById('app')?.dataset.page ?? '{}').props?.name || 'Torii';
 

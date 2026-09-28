@@ -1,9 +1,12 @@
 import { AnimeCard } from '@/components/subtracker/anime-card';
-import { ANY_FILTERS, AnimeToolbar, navigateAnime } from '@/components/subtracker/anime-toolbar';
+import { ANY_FILTERS, AnimeToolbar, animeQueryParams } from '@/components/subtracker/anime-toolbar';
+import { GenreChips } from '@/components/subtracker/facet-filters';
 import { ShowsPagination } from '@/components/subtracker/shows-pagination';
 import { Button } from '@/components/ui/button';
+import { useFilterNavigation } from '@/hooks/use-filter-navigation';
 import AppLayout from '@/layouts/app-layout';
 import { animeSeasonLabel } from '@/lib/anime';
+import { POSTER_GRID } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { type AnimeIndexProps } from '@/types/subtracker';
 import { Head, router } from '@inertiajs/react';
@@ -11,19 +14,36 @@ import { Head, router } from '@inertiajs/react';
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Anime', href: '/anime' }];
 
 export default function AnimeIndex({ anime, filters, filterOptions }: AnimeIndexProps) {
-    const unfiltered = filters.season === null && filters.year === null && filters.status === null && filters.genre === null && filters.linked === 'all';
+    const nav = useFilterNavigation('/anime', filters, animeQueryParams);
+
+    const unfiltered =
+        filters.q === '' &&
+        filters.season === null &&
+        filters.year === null &&
+        filters.status === null &&
+        filters.linked === 'all' &&
+        filters.format.length === 0 &&
+        filters.genresInclude.length === 0 &&
+        filters.genresExclude.length === 0;
     const scope = animeSeasonLabel(filters.season, filters.year);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Anime" />
             <div className="flex h-full flex-1 flex-col gap-4 p-3 sm:p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                    <AnimeToolbar filters={filters} options={filterOptions} />
-                    <span className="text-sm text-muted-foreground">
-                        {anime.meta.total} title{anime.meta.total === 1 ? '' : 's'}
-                        {scope ? ` · ${scope}` : ''}
-                    </span>
+                <div className="flex flex-col gap-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <AnimeToolbar filters={nav.filters} options={filterOptions} nav={nav} />
+                        <span className="text-sm text-muted-foreground">
+                            {anime.meta.total} title{anime.meta.total === 1 ? '' : 's'}
+                            {scope ? ` · ${scope}` : ''}
+                        </span>
+                    </div>
+                    <GenreChips
+                        include={nav.filters.genresInclude}
+                        exclude={nav.filters.genresExclude}
+                        onChange={(genresInclude, genresExclude) => nav.submit({ genresInclude, genresExclude })}
+                    />
                 </div>
 
                 {anime.data.length === 0 ? (
@@ -33,14 +53,14 @@ export default function AnimeIndex({ anime, filters, filterOptions }: AnimeIndex
                         ) : (
                             <>
                                 <p>No anime match these filters.</p>
-                                <Button variant="outline" size="sm" onClick={() => navigateAnime(ANY_FILTERS)}>
+                                <Button variant="outline" size="sm" onClick={() => nav.navigate(ANY_FILTERS)}>
                                     Show all anime
                                 </Button>
                             </>
                         )}
                     </div>
                 ) : (
-                    <div className="grid gap-3 sm:gap-4 [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))] sm:[grid-template-columns:repeat(auto-fill,minmax(180px,1fr))] lg:[grid-template-columns:repeat(auto-fill,minmax(200px,1fr))]">
+                    <div className={POSTER_GRID}>
                         {anime.data.map((item) => (
                             <AnimeCard key={item.id} anime={item} />
                         ))}

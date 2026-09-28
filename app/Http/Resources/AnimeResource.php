@@ -6,6 +6,7 @@ namespace App\Http\Resources;
 
 use App\Models\Anime;
 use App\Models\ShowAnimeLink;
+use App\Services\Metadata\AiringWindow;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -69,6 +70,7 @@ final class AnimeResource extends JsonResource
             'externalIds' => $this->externalIds->pluck('external_id', 'provider')->all(),
             'primaryProvider' => $this->primary_provider,
             'syncedAt' => $this->synced_at->toIso8601String(),
+            'airingWindow' => app(AiringWindow::class)->for($this->id, now()),
         ];
     }
 }

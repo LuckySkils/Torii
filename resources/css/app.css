@@ -6,7 +6,13 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Large layout density (hooks/use-density.ts): data-density="large" on <html>. Pair with a breakpoint, e.g. large:md:w-96. */
+@custom-variant large (&:where([data-density=large], [data-density=large] *));
+
 @theme {
+    /* 1920px: full-HD and up, where the large density widens cards once more. */
+    --breakpoint-3xl: 120rem;
+
     --font-sans:
         'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 

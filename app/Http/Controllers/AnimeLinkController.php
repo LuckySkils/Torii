@@ -56,7 +56,7 @@ class AnimeLinkController extends Controller
         $searchedQuery = $typed === '' ? $normalizer->withoutSeasonMarker($show->name) : $typed;
         $season = $normalizer->normalize($query)->seasonNumber();
 
-        $results = $this->localSearch($normalizer->normalize($query)->base);
+        $results = $this->localSearch($query);
         $providerSearched = false;
         $providerError = null;
 
@@ -206,24 +206,12 @@ class AnimeLinkController extends Controller
      *
      * @return Collection<int, Anime>
      */
-    private function localSearch(string $normalizedBase): Collection
+    private function localSearch(string $query): Collection
     {
-        $words = array_filter(explode(' ', $normalizedBase), fn (string $word) => $word !== '');
-
-        if ($words === []) {
+        if (trim(app(TitleNormalizer::class)->normalize($query)->base) === '') {
             return new Collection;
         }
 
-        $query = Anime::query()->select('id');
-
-        foreach ($words as $word) {
-            // Words are letters/digits only after normalization, so no LIKE escaping is needed.
-            $query->whereRaw(
-                "lower(concat_ws(' ', title_romaji, title_english, title_native, synonyms::text)) like ?",
-                ['%'.$word.'%'],
-            );
-        }
-
-        return $query->limit(50)->get();
+        return Anime::query()->select('id')->matchingTitle($query)->limit(50)->get();
     }
 }

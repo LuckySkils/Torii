@@ -7,6 +7,7 @@ namespace App\Console\Commands;
 use App\Enums\ImageStatus;
 use App\Jobs\FetchShowImage;
 use App\Models\Show;
+use App\Services\SubsPlease\PosterFetchSpacing;
 use Illuminate\Console\Command;
 
 class ImagesFetch extends Command
@@ -26,7 +27,7 @@ class ImagesFetch extends Command
         $shows = $query->get();
 
         foreach ($shows as $i => $show) {
-            FetchShowImage::dispatch($show->id)->delay(now()->addSeconds($i * 3));
+            FetchShowImage::dispatch($show->id)->delay(now()->addSeconds($i * PosterFetchSpacing::SECONDS));
         }
 
         $this->info("Dispatched image fetches for {$shows->count()} shows.");

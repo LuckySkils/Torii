@@ -11,7 +11,8 @@ import { SeasonLabel } from '@/components/subtracker/season-label';
 import { ShowCard } from '@/components/subtracker/show-card';
 import { ShowListRowMobile } from '@/components/subtracker/show-list-row-mobile';
 import { ShowsPagination } from '@/components/subtracker/shows-pagination';
-import { ShowsToolbar } from '@/components/subtracker/shows-toolbar';
+import { clearedShowFilters, ShowsToolbar, showsQueryParams } from '@/components/subtracker/shows-toolbar';
+import { GenreChips } from '@/components/subtracker/facet-filters';
 import { AiredAheadLine } from '@/components/subtracker/aired-ahead-line';
 import { TrackSwitch } from '@/components/subtracker/track-switch';
 import { Button } from '@/components/ui/button';
@@ -19,10 +20,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useAdaptivePoll } from '@/hooks/use-adaptive-poll';
+import { useFilterNavigation } from '@/hooks/use-filter-navigation';
 import { useRecentActivity } from '@/hooks/use-recent-activity';
 import { useShowsView } from '@/hooks/use-shows-view';
 import AppLayout from '@/layouts/app-layout';
 import { latestEpisodeNumber, posterFor } from '@/lib/anime';
+import { POSTER_GRID } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { type RuleState, type ShowsIndexProps } from '@/types/subtracker';
 import { Head, Link, router } from '@inertiajs/react';
@@ -34,6 +37,7 @@ const breadcrumbs: BreadcrumbItem[] = [{ title: 'Shows', href: '/shows' }];
 const DELETABLE_RULE_STATES: RuleState[] = ['synced', 'disabled', 'error'];
 
 export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndexProps) {
+    const nav = useFilterNavigation('/shows', filters, showsQueryParams);
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
     const [selectionMode, setSelectionMode] = useState(false);
     const [view, setView] = useShowsView();
@@ -45,7 +49,7 @@ export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndex
     useEffect(() => {
         setSelectedIds([]);
         setSelectionMode(false);
-    }, [filters.q, filters.tracked, filters.sort, filters.season, filters.year, filters.review, shows.meta.current_page]);
+    }, [filters.q, filters.tracked, filters.sort, filters.season, filters.year, filters.review, filters.format, filters.genresInclude, filters.genresExclude, shows.meta.current_page]);
 
     const pageIds = shows.data.map((show) => show.id);
     const allSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id));
@@ -65,15 +69,20 @@ export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndex
     }
 
     function clearFilters() {
-        router.get(
-            '/shows',
-            { q: '', tracked: 'all', sort: filters.sort, season: '', year: '', review: '' },
-            { preserveState: true, preserveScroll: true, replace: true },
-        );
+        nav.navigate(clearedShowFilters(filters.sort));
     }
 
-    const isFiltered = filters.q !== '' || filters.tracked !== 'all' || filters.season !== null || filters.year !== null || filters.review;
-    const onlyReviewFilter = filters.review && filters.q === '' && filters.tracked === 'all' && filters.season === null && filters.year === null;
+    const otherFilters =
+        filters.q !== '' ||
+        filters.tracked !== 'all' ||
+        filters.season !== null ||
+        filters.year !== null ||
+        filters.format.length > 0 ||
+        filters.genresInclude.length > 0 ||
+        filters.genresExclude.length > 0;
+    const isFiltered = filters.review || otherFilters;
+    // Review is the only filter on: an empty result means there's simply nothing to review.
+    const onlyReviewFilter = filters.review && !otherFilters;
     const isEmptyCatalog = shows.meta.total === 0 && !isFiltered;
     const isEmptyResults = shows.data.length === 0 && !isEmptyCatalog;
     const bulkBarVisible = selectedIds.length > 0;
@@ -82,14 +91,14 @@ export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndex
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Shows" />
             <div className={`flex h-full flex-1 flex-col gap-4 p-3 sm:p-4 ${bulkBarVisible ? 'pb-24 sm:pb-4' : ''}`}>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                    <ShowsToolbar filters={filters} years={filterOptions.years} reviewCount={filterOptions.reviewCount} view={view} onViewChange={setView} />
+                <div className="flex flex-wrap items-center justify-between gap-2 sm:flex-nowrap sm:items-start">
+                    <ShowsToolbar filters={nav.filters} options={filterOptions} nav={nav} view={view} onViewChange={setView} />
                     <ToggleGroup
                         type="single"
                         value={view}
                         onValueChange={(value) => value && setView(value as 'grid' | 'list')}
                         aria-label="Shows view"
-                        className="hidden sm:flex"
+                        className="hidden shrink-0 sm:flex"
                     >
                         <ToggleGroupItem value="grid" aria-label="Grid view">
                             <LayoutGrid className="size-4" />
@@ -99,6 +108,16 @@ export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndex
                         </ToggleGroupItem>
                     </ToggleGroup>
                 </div>
+
+                <GenreChips
+                    className="-mt-2"
+                    include={nav.filters.genresInclude}
+                    exclude={nav.filters.genresExclude}
+                    onChange={(genresInclude, genresExclude) => nav.submit({ genresInclude, genresExclude })}
+                />
+                {(filters.format.length > 0 || filters.genresInclude.length > 0) && (
+                    <p className="-mt-2 text-xs text-muted-foreground">Format and included genres come from the linked anime, so unlinked shows are left out.</p>
+                )}
 
                 {view === 'grid' && shows.data.length > 0 && (
                     <div className="flex items-center justify-between gap-2 sm:hidden">
@@ -147,7 +166,7 @@ export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndex
 
                 {shows.data.length > 0 && view === 'grid' && (
                     <div
-                        className="grid gap-3 sm:gap-4 [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))] sm:[grid-template-columns:repeat(auto-fill,minmax(180px,1fr))] lg:[grid-template-columns:repeat(auto-fill,minmax(200px,1fr))]"
+                        className={POSTER_GRID}
                     >
                         {shows.data.map((show) => (
                             <ShowCard

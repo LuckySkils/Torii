@@ -32,6 +32,11 @@ if [ "$1" = "supervisord" ]; then
     echo "[torii] Waiting for database... ($tries/30)"
     sleep 2
   done
+
+  # 4. One-time data tasks (initial feed poll, posters, anime sync, ...). This only
+  #    queues jobs, so it doesn't delay startup; the worker runs them once it's up.
+  #    A failure here must not stop the container: the next start retries.
+  php artisan torii:bootstrap || echo "[torii] Bootstrap could not queue its tasks; retrying on the next start." >&2
 fi
 
 exec "$@"

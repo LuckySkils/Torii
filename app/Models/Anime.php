@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Services\Metadata\Matching\TitleNormalizer;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -83,6 +85,69 @@ class Anime extends Model
     public function image(): HasOne
     {
         return $this->hasOne(AnimeImage::class);
+    }
+
+    /** AniList's anime formats, in the order filters list them. */
+    public const FORMATS = ['TV', 'TV_SHORT', 'MOVIE', 'SPECIAL', 'OVA', 'ONA', 'MUSIC'];
+
+    /**
+     * Every word of $text (normalized, season marker dropped) appears in some
+     * title or synonym.
+     *
+     * @param  Builder<Anime>  $query
+     */
+    public function scopeMatchingTitle(Builder $query, string $text): void
+    {
+        $words = array_filter(explode(' ', app(TitleNormalizer::class)->normalize($text)->base), fn (string $word) => $word !== '');
+
+        foreach ($words as $word) {
+            // Words are letters/digits only after normalization, so no LIKE escaping is needed.
+            $query->whereRaw(
+                "lower(concat_ws(' ', title_romaji, title_english, title_native, synonyms::text)) like ?",
+                ['%'.$word.'%'],
+            );
+        }
+    }
+
+    /**
+     * Has every one of $genres (JSONB containment: genres @> '[...]').
+     *
+     * @param  Builder<Anime>  $query
+     * @param  array<int, string>  $genres
+     */
+    public function scopeWithAllGenres(Builder $query, array $genres): void
+    {
+        if ($genres !== []) {
+            $query->whereJsonContains('genres', array_values($genres));
+        }
+    }
+
+    /**
+     * Has none of $genres.
+     *
+     * @param  Builder<Anime>  $query
+     * @param  array<int, string>  $genres
+     */
+    public function scopeWithoutGenres(Builder $query, array $genres): void
+    {
+        foreach ($genres as $genre) {
+            $query->whereJsonDoesntContain('genres', $genre);
+        }
+    }
+
+    /**
+     * Has any of $genres (for "the linked anime has an excluded genre").
+     *
+     * @param  Builder<Anime>  $query
+     * @param  array<int, string>  $genres
+     */
+    public function scopeWithAnyGenre(Builder $query, array $genres): void
+    {
+        $query->where(function (Builder $any) use ($genres) {
+            foreach ($genres as $genre) {
+                $any->orWhereJsonContains('genres', $genre);
+            }
+        });
     }
 
     /** Several SubsPlease shows may point at the same anime (show_id is unique, anime_id isn't). */

@@ -27,7 +27,7 @@ export function AnimeFacts({ format = null, season, seasonYear, status, episodes
         return null;
     }
 
-    return <p className="text-sm text-muted-foreground">{facts.join(' · ')}</p>;
+    return <p className="text-sm text-muted-foreground large:md:text-base">{facts.join(' · ')}</p>;
 }
 
 export function GenreBadges({ genres }: { genres: string[] }) {
@@ -38,7 +38,7 @@ export function GenreBadges({ genres }: { genres: string[] }) {
     return (
         <div className="flex flex-wrap gap-1.5">
             {genres.map((genre) => (
-                <Badge key={genre} variant="secondary" className="font-normal">
+                <Badge key={genre} variant="secondary" className="font-normal large:md:px-2.5 large:md:text-sm">
                     {genre}
                 </Badge>
             ))}
@@ -57,7 +57,7 @@ export function NextEpisodeLine({ nextAiringAt, nextEpisode }: { nextAiringAt: s
     const when = new Date(nextAiringAt);
 
     return (
-        <p className="text-sm">
+        <p className="text-sm large:md:text-base">
             {nextEpisode !== null ? `Ep ${nextEpisode}` : 'Next episode'} airs{' '}
             <TapInfo
                 trigger={

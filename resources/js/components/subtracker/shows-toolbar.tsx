@@ -4,16 +4,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
-import { type ShowFilters } from '@/types/subtracker';
-import { router } from '@inertiajs/react';
+import { type FilterNavigation, type QueryParams } from '@/hooks/use-filter-navigation';
+import { type FilterOptions, type ShowFilters } from '@/types/subtracker';
 import { LayoutGrid, List, Loader2, SlidersHorizontal } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
+import { FormatFilter, GenreFilter } from './facet-filters';
 
 interface ShowsToolbarProps {
     filters: ShowFilters;
-    years: number[];
-    /** Shows needing metadata review, whatever the other filters. */
-    reviewCount: number;
+    options: FilterOptions;
+    nav: FilterNavigation<ShowFilters>;
     view: 'grid' | 'list';
     onViewChange: (view: 'grid' | 'list') => void;
 }
@@ -39,13 +39,11 @@ function ReviewToggle({ active, count, onToggle, className }: { active: boolean;
     );
 }
 
-const SEARCH_DEBOUNCE_MS = 400;
-
 /** Radix Select can't use "" as an item value, so "all"/"all-years" stand in for the unset filter on the wire. */
 const SEASON_ALL = 'all';
 const YEAR_ALL = 'all-years';
 
-function toQueryParams(filters: ShowFilters): Record<string, string> {
+export function showsQueryParams(filters: ShowFilters): QueryParams {
     return {
         q: filters.q,
         tracked: filters.tracked,
@@ -53,88 +51,48 @@ function toQueryParams(filters: ShowFilters): Record<string, string> {
         season: filters.season ?? '',
         year: filters.year === null ? '' : String(filters.year),
         review: filters.review ? '1' : '',
+        format: filters.format,
+        genres_include: filters.genresInclude,
+        genres_exclude: filters.genresExclude,
     };
 }
 
-export function ShowsToolbar({ filters, years, reviewCount, view, onViewChange }: ShowsToolbarProps) {
-    const [search, setSearch] = useState(filters.q);
-    const [searching, setSearching] = useState(false);
+/** Everything off except the sort, which is a view preference rather than a filter. */
+export function clearedShowFilters(sort: ShowFilters['sort']): ShowFilters {
+    return { q: '', tracked: 'all', sort, season: null, year: null, review: false, format: [], genresInclude: [], genresExclude: [] };
+}
+
+export function ShowsToolbar({ filters, options, nav, view, onViewChange }: ShowsToolbarProps) {
     const [filtersOpen, setFiltersOpen] = useState(false);
-
-    // Tracks the q value WE last sent to the server. If filters.q changes to
-    // something else, it came from outside this component (clear-filters,
-    // browser back/forward) and the input should resync; if it changes to
-    // match this, it's just our own request landing and must not clobber
-    // whatever the user has typed since.
-    const lastSubmitted = useRef(filters.q);
-    const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-    const cancelTokenRef = useRef<{ cancel: VoidFunction } | null>(null);
-
-    useEffect(() => {
-        if (filters.q !== lastSubmitted.current) {
-            lastSubmitted.current = filters.q;
-            setSearch(filters.q);
-        }
-    }, [filters.q]);
-
-    useEffect(() => {
-        return () => clearTimeout(debounceRef.current);
-    }, []);
-
-    function navigate(next: ShowFilters, spinner: boolean) {
-        cancelTokenRef.current?.cancel();
-        lastSubmitted.current = next.q;
-
-        router.get('/shows', toQueryParams(next), {
-            preserveState: true,
-            preserveScroll: true,
-            replace: true,
-            onCancelToken: (token) => {
-                cancelTokenRef.current = token;
-            },
-            onStart: () => spinner && setSearching(true),
-            onFinish: () => spinner && setSearching(false),
-        });
-    }
-
-    function submit(overrides: Partial<ShowFilters>) {
-        clearTimeout(debounceRef.current);
-        navigate({ ...filters, q: search, ...overrides }, false);
-    }
-
-    function handleSearchChange(value: string) {
-        setSearch(value);
-        clearTimeout(debounceRef.current);
-
-        debounceRef.current = setTimeout(() => {
-            if (value === filters.q) {
-                return;
-            }
-
-            navigate({ ...filters, q: value }, true);
-        }, SEARCH_DEBOUNCE_MS);
-    }
+    const submit = nav.submit;
+    const reviewCount = options.reviewCount;
+    const setGenres = (genresInclude: string[], genresExclude: string[]) => submit({ genresInclude, genresExclude });
 
     function clearFiltersInSheet() {
-        clearTimeout(debounceRef.current);
-        navigate({ q: '', tracked: 'all', sort: filters.sort, season: null, year: null, review: false }, false);
+        nav.navigate(clearedShowFilters(filters.sort));
         setFiltersOpen(false);
     }
 
     const activeFilterCount =
-        (filters.tracked !== 'all' ? 1 : 0) + (filters.season !== null ? 1 : 0) + (filters.year !== null ? 1 : 0) + (filters.review ? 1 : 0);
+        (filters.tracked !== 'all' ? 1 : 0) +
+        (filters.season !== null ? 1 : 0) +
+        (filters.year !== null ? 1 : 0) +
+        (filters.review ? 1 : 0) +
+        filters.format.length +
+        filters.genresInclude.length +
+        filters.genresExclude.length;
 
     return (
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-1 sm:flex-row sm:flex-wrap sm:items-center">
             <div className="relative w-full sm:w-auto sm:max-w-xs">
                 <Input
                     placeholder="Search shows…"
-                    value={search}
-                    onChange={(e) => handleSearchChange(e.target.value)}
-                    className={searching ? 'pr-8' : undefined}
+                    value={nav.search}
+                    onChange={(e) => nav.changeSearch(e.target.value)}
+                    className={nav.searching ? 'pr-8' : undefined}
                     aria-label="Search shows"
                 />
-                {searching && <Loader2 className="absolute top-1/2 right-2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />}
+                {nav.searching && <Loader2 className="absolute top-1/2 right-2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />}
             </div>
 
             {/* Phone: filters collapse into a bottom sheet, view toggle stays next to it. */}
@@ -200,7 +158,7 @@ export function ShowsToolbar({ filters, years, reviewCount, view, onViewChange }
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value={YEAR_ALL}>All years</SelectItem>
-                                        {years.map((year) => (
+                                        {options.years.map((year) => (
                                             <SelectItem key={year} value={String(year)}>
                                                 {year}
                                             </SelectItem>
@@ -221,6 +179,22 @@ export function ShowsToolbar({ filters, years, reviewCount, view, onViewChange }
                                         <SelectItem value="premiered">Premiere (newest)</SelectItem>
                                     </SelectContent>
                                 </Select>
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                                <span className="text-sm font-medium">Format</span>
+                                <FormatFilter inline options={options.formats} selected={filters.format} onChange={(format) => submit({ format })} />
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                                <span className="text-sm font-medium">Genres</span>
+                                <GenreFilter
+                                    inline
+                                    options={options.genres}
+                                    include={filters.genresInclude}
+                                    exclude={filters.genresExclude}
+                                    onChange={setGenres}
+                                />
                             </div>
 
                             {(reviewCount > 0 || filters.review) && (
@@ -287,7 +261,7 @@ export function ShowsToolbar({ filters, years, reviewCount, view, onViewChange }
                 </SelectTrigger>
                 <SelectContent>
                     <SelectItem value={YEAR_ALL}>All years</SelectItem>
-                    {years.map((year) => (
+                    {options.years.map((year) => (
                         <SelectItem key={year} value={String(year)}>
                             {year}
                         </SelectItem>
@@ -304,6 +278,14 @@ export function ShowsToolbar({ filters, years, reviewCount, view, onViewChange }
                     <SelectItem value="premiered">Premiere (newest)</SelectItem>
                 </SelectContent>
             </Select>
+            <FormatFilter className="hidden w-36 sm:flex" options={options.formats} selected={filters.format} onChange={(format) => submit({ format })} />
+            <GenreFilter
+                className="hidden w-40 sm:flex"
+                options={options.genres}
+                include={filters.genresInclude}
+                exclude={filters.genresExclude}
+                onChange={setGenres}
+            />
             {(reviewCount > 0 || filters.review) && (
                 <ReviewToggle className="hidden sm:inline-flex" active={filters.review} count={reviewCount} onToggle={() => submit({ review: !filters.review })} />
             )}

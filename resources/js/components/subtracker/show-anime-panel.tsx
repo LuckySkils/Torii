@@ -5,7 +5,8 @@ import { Link } from '@inertiajs/react';
 import { ExternalLink, Link2, Link2Off } from 'lucide-react';
 import { useState } from 'react';
 import { AnimeDescription } from './anime-description';
-import { AnimeFacts, GenreBadges, NextEpisodeLine } from './anime-facts';
+import { AiringWindowStrip } from './airing-window';
+import { AnimeFacts, GenreBadges } from './anime-facts';
 import { type LinkDialogTab, LinkAnimeDialog } from './link-anime-dialog';
 import { UnlinkAnimeDialog } from './unlink-anime-dialog';
 
@@ -63,8 +64,8 @@ export function ShowAnimePanel({ show, currentEpisode }: ShowAnimePanelProps) {
     return (
         <section className="flex flex-col gap-3 rounded-xl border p-3 sm:p-4">
             <div className="flex flex-col gap-0.5">
-                <h2 className="text-lg leading-tight font-medium break-words">{animeTitle(anime)}</h2>
-                {subtitle && <p className="text-sm break-words text-muted-foreground">{subtitle}</p>}
+                <h2 className="text-lg leading-tight font-medium break-words large:md:text-2xl">{animeTitle(anime)}</h2>
+                {subtitle && <p className="text-sm break-words text-muted-foreground large:md:text-base">{subtitle}</p>}
                 <p className="text-xs text-muted-foreground">SubsPlease name: {show.name}</p>
             </div>
 
@@ -77,11 +78,11 @@ export function ShowAnimePanel({ show, currentEpisode }: ShowAnimePanelProps) {
                 episodesTotal={anime.episodesTotal}
                 durationMinutes={anime.durationMinutes}
             />
-            <NextEpisodeLine nextAiringAt={anime.nextAiringAt} nextEpisode={anime.nextEpisode} />
+            <AiringWindowStrip airingWindow={anime.airingWindow} className="large:md:max-w-3xl" />
             <GenreBadges genres={anime.genres} />
             {anime.description && <AnimeDescription html={anime.description} />}
 
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm large:md:text-base">
                 <Link href={`/anime/${anime.id}`} className="font-medium hover:underline">
                     Air dates & full details
                 </Link>

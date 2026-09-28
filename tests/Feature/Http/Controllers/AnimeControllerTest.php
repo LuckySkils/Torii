@@ -50,10 +50,23 @@ test('the browse page defaults to the current season and pages 30 at a time', fu
         ->has('anime.data', 1)
         ->where('anime.data.0.id', $summer->id)
         ->where('anime.meta.per_page', 30)
-        ->where('filters', ['season' => 'SUMMER', 'year' => 2026, 'status' => null, 'genre' => null, 'linked' => 'all'])
+        ->where('filters', [
+            'q' => '',
+            'season' => 'SUMMER',
+            'year' => 2026,
+            'status' => null,
+            'linked' => 'all',
+            'format' => [],
+            'genresInclude' => [],
+            'genresExclude' => [],
+        ])
         ->where('filterOptions.seasons', ['WINTER', 'SPRING', 'SUMMER', 'FALL'])
         ->where('filterOptions.years', [2026])
-        ->where('filterOptions.genres', ['Action', 'Comedy', 'Drama']));
+        ->where('filterOptions.genres', [
+            ['value' => 'Action', 'count' => 1],
+            ['value' => 'Comedy', 'count' => 1],
+            ['value' => 'Drama', 'count' => 1],
+        ]));
 });
 
 test('the browse page filters by season, year, status, genre and linked', function () {
@@ -211,6 +224,11 @@ test('the show page carries the full anime object', function () {
             'nextAiringAt' => '2026-09-29T15:00:00+00:00',
             'nextEpisode' => 12,
             'siteUrl' => 'https://anilist.co/anime/1',
+            'airingWindow' => [
+                'previous' => null,
+                'current' => ['episode' => 12, 'airsAt' => '2026-09-29T15:00:00+00:00'],
+                'next' => null,
+            ],
             'confidence' => 90,
         ]));
 });
