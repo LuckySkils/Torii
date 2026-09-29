@@ -1,4 +1,5 @@
 import { DeleteRuleDialog } from '@/components/subtracker/delete-rule-dialog';
+import { ActionHint } from '@/components/subtracker/hint';
 import { LatestEpisodeLabel } from '@/components/subtracker/latest-episode-label';
 import { MatchesDialog } from '@/components/subtracker/matches-dialog';
 import { QueueMissingButton } from '@/components/subtracker/queue-missing-button';
@@ -17,6 +18,7 @@ import { useAdaptivePoll } from '@/hooks/use-adaptive-poll';
 import { useRecentActivity } from '@/hooks/use-recent-activity';
 import AppLayout from '@/layouts/app-layout';
 import { airedAhead, airedAheadLabel, newestReleasedEpisode, posterFor } from '@/lib/anime';
+import { ACTION_HINTS } from '@/lib/hints';
 import { type BreadcrumbItem } from '@/types';
 import { type LatestRelease, type RuleState, type ShowShowProps } from '@/types/subtracker';
 import { Head, router } from '@inertiajs/react';
@@ -42,7 +44,13 @@ function ImageStatusLine({ show }: { show: ShowShowProps['show'] }) {
 
     if (show.imageStatus === 'error') {
         return (
-            <TapInfo trigger={<button type="button" className="cursor-pointer bg-transparent p-0 text-destructive underline decoration-dotted">error checking image</button>}>
+            <TapInfo
+                trigger={
+                    <button type="button" className="cursor-pointer bg-transparent p-0 text-destructive underline decoration-dotted">
+                        error checking image
+                    </button>
+                }
+            >
                 {show.imageError ?? 'Unknown error'}
             </TapInfo>
         );
@@ -117,9 +125,11 @@ export default function ShowShow({ show, releases }: ShowShowProps) {
                                 {preferSubsPlease ? 'Showing SubsPlease art · show AniList cover' : 'Showing AniList cover · show SubsPlease art'}
                             </button>
                         )}
-                        <Button variant="outline" size="sm" disabled={refreshing} onClick={reloadImage}>
-                            {refreshing ? 'Reloading…' : 'Reload image'}
-                        </Button>
+                        <ActionHint hint={ACTION_HINTS.reloadImage}>
+                            <Button variant="outline" size="sm" disabled={refreshing} onClick={reloadImage}>
+                                {refreshing ? 'Reloading…' : 'Reload image'}
+                            </Button>
+                        </ActionHint>
                         <p className="text-xs text-muted-foreground">
                             <ImageStatusLine show={show} />
                         </p>
@@ -135,9 +145,11 @@ export default function ShowShow({ show, releases }: ShowShowProps) {
                                     showId={show.id}
                                     showName={show.name}
                                     trigger={
-                                        <Button variant="outline" size="sm">
-                                            Preview matches
-                                        </Button>
+                                        <ActionHint hint={ACTION_HINTS.previewMatches}>
+                                            <Button variant="outline" size="sm">
+                                                Preview matches
+                                            </Button>
+                                        </ActionHint>
                                     }
                                 />
                                 {canDeleteRule && (
@@ -145,9 +157,11 @@ export default function ShowShow({ show, releases }: ShowShowProps) {
                                         showId={show.id}
                                         showName={show.name}
                                         trigger={
-                                            <Button variant="destructive" size="sm">
-                                                Delete rule
-                                            </Button>
+                                            <ActionHint hint={ACTION_HINTS.deleteRule}>
+                                                <Button variant="destructive" size="sm">
+                                                    Delete rule
+                                                </Button>
+                                            </ActionHint>
                                         }
                                     />
                                 )}
@@ -161,6 +175,7 @@ export default function ShowShow({ show, releases }: ShowShowProps) {
                                 tracked={show.isTracked}
                                 downloadableCount={show.downloadableCount}
                                 hasBatch={show.hasBatch}
+                                withHint
                             />
                             <RuleBadge trackingMode={show.trackingMode} state={show.ruleState} error={show.ruleError} />
                             {aired && (
@@ -188,9 +203,11 @@ export default function ShowShow({ show, releases }: ShowShowProps) {
                                 showId={show.id}
                                 showName={show.name}
                                 trigger={
-                                    <Button variant="outline" size="sm">
-                                        Preview matches
-                                    </Button>
+                                    <ActionHint hint={ACTION_HINTS.previewMatches}>
+                                        <Button variant="outline" size="sm">
+                                            Preview matches
+                                        </Button>
+                                    </ActionHint>
                                 }
                             />
                             {canDeleteRule && (
@@ -198,9 +215,11 @@ export default function ShowShow({ show, releases }: ShowShowProps) {
                                     showId={show.id}
                                     showName={show.name}
                                     trigger={
-                                        <Button variant="destructive" size="sm">
-                                            Delete rule
-                                        </Button>
+                                        <ActionHint hint={ACTION_HINTS.deleteRule}>
+                                            <Button variant="destructive" size="sm">
+                                                Delete rule
+                                            </Button>
+                                        </ActionHint>
                                     }
                                 />
                             )}

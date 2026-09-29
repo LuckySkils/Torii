@@ -1,12 +1,14 @@
 import { Button } from '@/components/ui/button';
 import { animeSubtitle, animeTitle } from '@/lib/anime';
+import { ACTION_HINTS } from '@/lib/hints';
 import { type AnimeLinkFull } from '@/types/subtracker';
 import { Link } from '@inertiajs/react';
 import { ExternalLink, Link2, Link2Off } from 'lucide-react';
 import { useState } from 'react';
-import { AnimeDescription } from './anime-description';
 import { AiringWindowStrip } from './airing-window';
+import { AnimeDescription } from './anime-description';
 import { AnimeFacts, GenreBadges } from './anime-facts';
+import { ActionHint } from './hint';
 import { type LinkDialogTab, LinkAnimeDialog } from './link-anime-dialog';
 import { UnlinkAnimeDialog } from './unlink-anime-dialog';
 
@@ -87,7 +89,12 @@ export function ShowAnimePanel({ show, currentEpisode }: ShowAnimePanelProps) {
                     Air dates & full details
                 </Link>
                 {anime.siteUrl && (
-                    <a href={anime.siteUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-medium hover:underline">
+                    <a
+                        href={anime.siteUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 font-medium hover:underline"
+                    >
                         View on AniList
                         <ExternalLink className="size-3.5" />
                     </a>
@@ -100,18 +107,22 @@ export function ShowAnimePanel({ show, currentEpisode }: ShowAnimePanelProps) {
                     {anime.linkSource === 'manual' ? 'Linked manually' : `Linked automatically (score ${anime.confidence})`}
                 </span>
                 <div className="flex flex-wrap gap-2 sm:ml-auto">
-                    <Button size="sm" variant="outline" onClick={() => setDialog({ open: true, tab: 'search' })}>
-                        Change link
-                    </Button>
+                    <ActionHint hint={ACTION_HINTS.changeLink}>
+                        <Button size="sm" variant="outline" onClick={() => setDialog({ open: true, tab: 'search' })}>
+                            Change link
+                        </Button>
+                    </ActionHint>
                     <UnlinkAnimeDialog
                         showId={show.id}
                         showName={show.name}
                         animeTitle={animeTitle(anime)}
                         trigger={
-                            <Button size="sm" variant="ghost" className="gap-1.5 text-destructive hover:text-destructive">
-                                <Link2Off className="size-4" />
-                                Unlink
-                            </Button>
+                            <ActionHint hint={ACTION_HINTS.unlink}>
+                                <Button size="sm" variant="ghost" className="gap-1.5 text-destructive hover:text-destructive">
+                                    <Link2Off className="size-4" />
+                                    Unlink
+                                </Button>
+                            </ActionHint>
                         }
                     />
                 </div>

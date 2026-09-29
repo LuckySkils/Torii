@@ -1,10 +1,12 @@
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatDelay } from '@/lib/dates';
+import { COLUMN_HINTS } from '@/lib/hints';
 import { type ReleaseSummary } from '@/types/subtracker';
 import { CopyLinkButton } from './copy-link-button';
 import { DispatchBadge } from './dispatch-badge';
 import { DownloadButton } from './download-button';
+import { ColumnHint } from './hint';
 import { RelativeTime } from './relative-time';
 
 interface ReleasesTableProps {
@@ -40,10 +42,18 @@ export function ReleasesTable({ releases, emptyMessage = 'No releases yet.' }: R
                     <TableRow>
                         <TableHead>Episode</TableHead>
                         <TableHead>Title</TableHead>
-                        <TableHead>Published</TableHead>
-                        <TableHead>First seen</TableHead>
-                        <TableHead>Delay</TableHead>
-                        <TableHead>Status</TableHead>
+                        <TableHead>
+                            <ColumnHint label="Published">{COLUMN_HINTS.published}</ColumnHint>
+                        </TableHead>
+                        <TableHead>
+                            <ColumnHint label="First seen">{COLUMN_HINTS.firstSeen}</ColumnHint>
+                        </TableHead>
+                        <TableHead>
+                            <ColumnHint label="Delay">{COLUMN_HINTS.delay}</ColumnHint>
+                        </TableHead>
+                        <TableHead>
+                            <ColumnHint label="Status">{COLUMN_HINTS.status}</ColumnHint>
+                        </TableHead>
                         <TableHead className="w-20" />
                     </TableRow>
                 </TableHeader>

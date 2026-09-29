@@ -1,7 +1,8 @@
 import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { ACTION_HINTS } from '@/lib/hints';
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
+import { ActionHint } from './hint';
 
 interface QueueMissingButtonProps {
     showId: number;
@@ -25,16 +26,11 @@ export function QueueMissingButton({ showId, downloadableCount }: QueueMissingBu
     }
 
     return (
-        <Tooltip>
-            <TooltipTrigger asChild>
-                {/* span wrapper keeps the tooltip working while the button itself is disabled */}
-                <span tabIndex={0}>
-                    <Button variant="outline" size="sm" disabled={disabled} onClick={handleClick}>
-                        Queue missing ({downloadableCount})
-                    </Button>
-                </span>
-            </TooltipTrigger>
-            <TooltipContent>{downloadableCount === 0 ? 'Nothing new to queue' : `Queue ${downloadableCount} releases`}</TooltipContent>
-        </Tooltip>
+        // wrapDisabled keeps the tooltip working while the button itself is disabled
+        <ActionHint hint={downloadableCount === 0 ? ACTION_HINTS.queueMissingNone : ACTION_HINTS.queueMissing} wrapDisabled>
+            <Button variant="outline" size="sm" disabled={disabled} onClick={handleClick}>
+                Queue missing ({downloadableCount})
+            </Button>
+        </ActionHint>
     );
 }

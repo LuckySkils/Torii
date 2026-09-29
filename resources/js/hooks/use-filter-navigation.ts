@@ -38,9 +38,13 @@ export function toQueryString(params: QueryParams): string {
  * paginator's own links: Laravel turns empty params into nulls and drops them
  * from those links, so page 2 of "any season" would silently become page 2 of
  * the current season. Filter changes never carry a page, so they start on page 1.
+ *
+ * Pages without a search box (the schedule) simply have no `q` in their filters.
  */
-export function useFilterNavigation<F extends { q: string }>(path: string, serverFilters: F, toQueryParams: (filters: F) => QueryParams) {
-    const [search, setSearch] = useState(serverFilters.q);
+export function useFilterNavigation<F extends object>(path: string, serverFilters: F, toQueryParams: (filters: F) => QueryParams) {
+    const hasSearch = 'q' in serverFilters;
+    const serverQ = qOf(serverFilters);
+    const [search, setSearch] = useState(serverQ);
     const [searching, setSearching] = useState(false);
     const [pending, setPending] = useState<F | null>(null);
     const filters = pending ?? serverFilters;
@@ -53,16 +57,16 @@ export function useFilterNavigation<F extends { q: string }>(path: string, serve
     // something else, it came from outside (browser back/forward) and the input
     // should resync; if it changes to match this, it's just our own request
     // landing and must not clobber whatever the user has typed since.
-    const lastSubmitted = useRef(serverFilters.q);
+    const lastSubmitted = useRef(serverQ);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const cancelTokenRef = useRef<{ cancel: VoidFunction } | null>(null);
 
     useEffect(() => {
-        if (serverFilters.q !== lastSubmitted.current) {
-            lastSubmitted.current = serverFilters.q;
-            setSearch(serverFilters.q);
+        if (serverQ !== lastSubmitted.current) {
+            lastSubmitted.current = serverQ;
+            setSearch(serverQ);
         }
-    }, [serverFilters.q]);
+    }, [serverQ]);
 
     useEffect(() => {
         return () => clearTimeout(debounceRef.current);
@@ -75,8 +79,8 @@ export function useFilterNavigation<F extends { q: string }>(path: string, serve
     function navigate(next: F, { spinner = false, page = 1, push = false }: { spinner?: boolean; page?: number; push?: boolean } = {}) {
         clearTimeout(debounceRef.current);
         cancelTokenRef.current?.cancel();
-        lastSubmitted.current = next.q;
-        setSearch(next.q);
+        lastSubmitted.current = qOf(next);
+        setSearch(qOf(next));
         setPending(next);
 
         router.get(
@@ -106,7 +110,7 @@ export function useFilterNavigation<F extends { q: string }>(path: string, serve
 
     /** Apply filter changes right away, keeping whatever is typed in the search box. */
     function submit(overrides: Partial<F>) {
-        navigate({ ...filtersRef.current, q: search, ...overrides });
+        navigate({ ...filtersRef.current, ...(hasSearch ? { q: search } : {}), ...overrides });
     }
 
     function changeSearch(value: string) {
@@ -114,7 +118,7 @@ export function useFilterNavigation<F extends { q: string }>(path: string, serve
         clearTimeout(debounceRef.current);
 
         debounceRef.current = setTimeout(() => {
-            if (value !== filtersRef.current.q) {
+            if (value !== qOf(filtersRef.current)) {
                 navigate({ ...filtersRef.current, q: value }, { spinner: true });
             }
         }, SEARCH_DEBOUNCE_MS);
@@ -138,4 +142,9 @@ export function useFilterNavigation<F extends { q: string }>(path: string, serve
     return { filters, search, searching, changeSearch, submit, navigate, pageHref, goToPage };
 }
 
-export type FilterNavigation<F extends { q: string }> = ReturnType<typeof useFilterNavigation<F>>;
+export type FilterNavigation<F extends object> = ReturnType<typeof useFilterNavigation<F>>;
+
+/** The search text in a filter state, or '' for pages without a search box. */
+function qOf(filters: object): string {
+    return 'q' in filters && typeof filters.q === 'string' ? filters.q : '';
+}

@@ -2,7 +2,7 @@ import { NavMain } from '@/components/nav-main';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { Folder, LayoutGrid, Tv } from 'lucide-react';
+import { CalendarDays, Folder, LayoutGrid, Tv } from 'lucide-react';
 import AppLogo from './app-logo';
 
 export function AppSidebar() {
@@ -12,6 +12,7 @@ export function AppSidebar() {
         { title: 'Dashboard', url: '/', icon: LayoutGrid },
         { title: 'Shows', url: '/shows', icon: Folder, badge: pendingLinkSuggestions, badgeUrl: '/shows?review=1' },
         { title: 'Anime', url: '/anime', icon: Tv },
+        { title: 'Schedule', url: '/schedule', icon: CalendarDays },
     ];
 
     return (

@@ -1,12 +1,14 @@
 import { AiringWindowStrip } from '@/components/subtracker/airing-window';
 import { AnimeDescription } from '@/components/subtracker/anime-description';
 import { AnimeFacts, GenreBadges, NextEpisodeLine } from '@/components/subtracker/anime-facts';
+import { ColumnHint } from '@/components/subtracker/hint';
 import { RelativeTime } from '@/components/subtracker/relative-time';
 import { ShowPoster } from '@/components/subtracker/show-poster';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/app-layout';
 import { animeSubtitle, animeTitle, coverPoster } from '@/lib/anime';
+import { COLUMN_HINTS } from '@/lib/hints';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { type AiringWindow, type AnimeAiring, type AnimeShowProps } from '@/types/subtracker';
@@ -16,7 +18,14 @@ import { useState } from 'react';
 
 const RECENT_AIRINGS = 25;
 
-const airDateTime = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const airDateTime = new Intl.DateTimeFormat(undefined, {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+});
 
 export default function AnimeShow({ anime, airings, linkedShows }: AnimeShowProps) {
     const title = animeTitle(anime);
@@ -76,8 +85,17 @@ export default function AnimeShow({ anime, airings, linkedShows }: AnimeShowProp
                     ) : (
                         <div className="flex flex-col gap-2">
                             {linkedShows.map((show) => (
-                                <Link key={show.id} href={`/shows/${show.id}`} className="flex items-center gap-3 rounded-xl border p-2 hover:bg-muted/50">
-                                    <ShowPoster imageUrl={show.imageUrl} imageStatus={show.imageUrl ? 'found' : 'none'} name={show.name} className="w-10" />
+                                <Link
+                                    key={show.id}
+                                    href={`/shows/${show.id}`}
+                                    className="flex items-center gap-3 rounded-xl border p-2 hover:bg-muted/50"
+                                >
+                                    <ShowPoster
+                                        imageUrl={show.imageUrl}
+                                        imageStatus={show.imageUrl ? 'found' : 'none'}
+                                        name={show.name}
+                                        className="w-10"
+                                    />
                                     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                                         <span className="text-sm font-medium break-words">{show.name}</span>
                                         <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
@@ -124,9 +142,20 @@ function AiringsSection({ airings, airingWindow }: { airings: AnimeAiring[]; air
             <AiringWindowStrip airingWindow={airingWindow} className="large:md:max-w-3xl" />
 
             {airings.length === 0 ? (
-                <p className="rounded-xl border p-4 text-sm text-muted-foreground">No air dates known yet. They're filled in by the daily airing sync.</p>
+                <p className="rounded-xl border p-4 text-sm text-muted-foreground">
+                    No air dates known yet. They're filled in by the daily airing sync.
+                </p>
             ) : (
                 <div className="max-h-[28rem] overflow-y-auto rounded-xl border large:md:max-h-[40rem]">
+                    <div className="sticky top-0 z-10 flex items-center gap-3 border-b bg-background px-3 py-2 text-xs font-medium text-muted-foreground large:md:text-sm">
+                        <span className="w-16 shrink-0">Episode</span>
+                        <span className="min-w-0 flex-1">
+                            <ColumnHint label="Airs">{COLUMN_HINTS.airingTime}</ColumnHint>
+                        </span>
+                        <span className="shrink-0">
+                            <ColumnHint label="State">{COLUMN_HINTS.airingState}</ColumnHint>
+                        </span>
+                    </div>
                     <ol className="divide-y">
                         {visible.map((airing) => {
                             const past = new Date(airing.airsAt).getTime() <= now;
@@ -135,9 +164,15 @@ function AiringsSection({ airings, airingWindow }: { airings: AnimeAiring[]; air
                             return (
                                 <li
                                     key={airing.episode}
-                                    className={cn('flex items-center gap-3 px-3 py-2 text-sm large:md:py-2.5 large:md:text-base', past && 'text-muted-foreground', isNext && 'bg-sky-500/5')}
+                                    className={cn(
+                                        'flex items-center gap-3 px-3 py-2 text-sm large:md:py-2.5 large:md:text-base',
+                                        past && 'text-muted-foreground',
+                                        isNext && 'bg-sky-500/5',
+                                    )}
                                 >
-                                    <span className={cn('w-16 shrink-0 font-medium tabular-nums', !past && 'text-foreground')}>Ep {airing.episode}</span>
+                                    <span className={cn('w-16 shrink-0 font-medium tabular-nums', !past && 'text-foreground')}>
+                                        Ep {airing.episode}
+                                    </span>
                                     <span className="min-w-0 flex-1">
                                         {airDateTime.format(new Date(airing.airsAt))}
                                         {airing.isEstimate && <span className="text-xs"> (estimated)</span>}
@@ -145,7 +180,12 @@ function AiringsSection({ airings, airingWindow }: { airings: AnimeAiring[]; air
                                     {past ? (
                                         <Check className="size-4 shrink-0" aria-label="aired" />
                                     ) : (
-                                        <span className={cn('shrink-0 text-xs', isNext ? 'font-medium text-sky-700 dark:text-sky-300' : 'text-muted-foreground')}>
+                                        <span
+                                            className={cn(
+                                                'shrink-0 text-xs',
+                                                isNext ? 'font-medium text-sky-700 dark:text-sky-300' : 'text-muted-foreground',
+                                            )}
+                                        >
                                             {isNext ? 'next · ' : ''}
                                             <RelativeTime iso={airing.airsAt} />
                                         </span>

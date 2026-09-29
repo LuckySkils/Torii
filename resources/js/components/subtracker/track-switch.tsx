@@ -1,7 +1,9 @@
 import { Switch } from '@/components/ui/switch';
+import { ACTION_HINTS } from '@/lib/hints';
 import { router } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { ActionHint } from './hint';
 import { TrackConfirmDialog } from './track-confirm-dialog';
 
 interface TrackSwitchProps {
@@ -10,9 +12,11 @@ interface TrackSwitchProps {
     tracked: boolean;
     downloadableCount: number;
     hasBatch: boolean;
+    /** Explain what tracking does (show page). Off on cards and rows, where the column header explains it once. */
+    withHint?: boolean;
 }
 
-export function TrackSwitch({ showId, showName, tracked, downloadableCount, hasBatch }: TrackSwitchProps) {
+export function TrackSwitch({ showId, showName, tracked, downloadableCount, hasBatch, withHint = false }: TrackSwitchProps) {
     const [checked, setChecked] = useState(tracked);
     const [pending, setPending] = useState(false);
     const [confirmOpen, setConfirmOpen] = useState(false);
@@ -51,7 +55,13 @@ export function TrackSwitch({ showId, showName, tracked, downloadableCount, hasB
 
     return (
         <>
-            <Switch checked={checked} disabled={pending} onCheckedChange={handleChange} aria-label={`Track ${showName}`} />
+            {withHint ? (
+                <ActionHint hint={ACTION_HINTS.track}>
+                    <Switch checked={checked} disabled={pending} onCheckedChange={handleChange} aria-label={`Track ${showName}`} />
+                </ActionHint>
+            ) : (
+                <Switch checked={checked} disabled={pending} onCheckedChange={handleChange} aria-label={`Track ${showName}`} />
+            )}
             <TrackConfirmDialog
                 open={confirmOpen}
                 onOpenChange={setConfirmOpen}

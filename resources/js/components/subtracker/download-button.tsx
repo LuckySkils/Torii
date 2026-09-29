@@ -1,9 +1,10 @@
 import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { ACTION_HINTS } from '@/lib/hints';
 import { TOUCH_TARGET_SM } from '@/lib/utils';
 import { router } from '@inertiajs/react';
 import { Download } from 'lucide-react';
 import { useState } from 'react';
+import { ActionHint } from './hint';
 
 interface DownloadButtonProps {
     releaseId: number;
@@ -30,23 +31,24 @@ export function DownloadButton({ releaseId, title, retry = false, variant = 'ico
         );
     }
 
+    const hint = retry ? ACTION_HINTS.retryDownload : ACTION_HINTS.download;
+
     if (variant === 'full') {
         return (
-            <Button variant="outline" size="sm" className={`gap-1.5 ${TOUCH_TARGET_SM}`} disabled={pending} onClick={handleClick}>
-                <Download className="size-3.5" />
-                {retry ? 'Retry' : 'Download'}
-            </Button>
+            <ActionHint hint={hint} touchInfo={false}>
+                <Button variant="outline" size="sm" className={`gap-1.5 ${TOUCH_TARGET_SM}`} disabled={pending} onClick={handleClick}>
+                    <Download className="size-3.5" />
+                    {retry ? 'Retry' : 'Download'}
+                </Button>
+            </ActionHint>
         );
     }
 
     return (
-        <Tooltip>
-            <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="size-8" aria-label={label} disabled={pending} onClick={handleClick}>
-                    <Download className="size-4" />
-                </Button>
-            </TooltipTrigger>
-            <TooltipContent>{label}</TooltipContent>
-        </Tooltip>
+        <ActionHint hint={hint} touchInfo={false}>
+            <Button variant="ghost" size="icon" className="size-8" aria-label={label} disabled={pending} onClick={handleClick}>
+                <Download className="size-4" />
+            </Button>
+        </ActionHint>
     );
 }

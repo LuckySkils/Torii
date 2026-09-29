@@ -205,7 +205,8 @@ interface FilterSelectProps {
     widthClass: string;
 }
 
-function FilterSelect({ label, value, anyLabel, options, onChange, fullWidth, widthClass }: FilterSelectProps) {
+/** A labelled single-select with an "any" option; inline (fixed width) or stacked for the filters sheet. */
+export function FilterSelect({ label, value, anyLabel, options, onChange, fullWidth, widthClass }: FilterSelectProps) {
     const select = (
         <Select value={value ?? ANY} onValueChange={(next) => onChange(next === ANY ? null : next)}>
             <SelectTrigger className={cn(!fullWidth && widthClass)} aria-label={`Filter by ${label.toLowerCase()}`}>

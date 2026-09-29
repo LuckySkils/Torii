@@ -1,13 +1,15 @@
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { formatDelay } from '@/lib/dates';
-import { type DashboardRelease } from '@/types/subtracker';
 import { latestEpisodeNumber, posterFor } from '@/lib/anime';
+import { formatDelay } from '@/lib/dates';
+import { COLUMN_HINTS } from '@/lib/hints';
+import { type DashboardRelease } from '@/types/subtracker';
 import { Link } from '@inertiajs/react';
 import { AnimeLinkIndicator } from './anime-link-indicator';
 import { CopyLinkButton } from './copy-link-button';
 import { DispatchBadge } from './dispatch-badge';
 import { DownloadButton } from './download-button';
+import { ColumnHint } from './hint';
 import { LatestEpisodeLabel } from './latest-episode-label';
 import { FirstEpisodeBadge, isPremiere, NewShowBadge } from './novelty-badges';
 import { PosterHoverPreview } from './poster-hover-preview';
@@ -56,10 +58,18 @@ export function LatestReleasesTable({ releases }: LatestReleasesTableProps) {
                         <TableHead>Show</TableHead>
                         <TableHead>Episode</TableHead>
                         <TableHead>Title</TableHead>
-                        <TableHead>Published</TableHead>
-                        <TableHead>First seen</TableHead>
-                        <TableHead>Delay</TableHead>
-                        <TableHead>Status</TableHead>
+                        <TableHead>
+                            <ColumnHint label="Published">{COLUMN_HINTS.published}</ColumnHint>
+                        </TableHead>
+                        <TableHead>
+                            <ColumnHint label="First seen">{COLUMN_HINTS.firstSeen}</ColumnHint>
+                        </TableHead>
+                        <TableHead>
+                            <ColumnHint label="Delay">{COLUMN_HINTS.delay}</ColumnHint>
+                        </TableHead>
+                        <TableHead>
+                            <ColumnHint label="Status">{COLUMN_HINTS.status}</ColumnHint>
+                        </TableHead>
                         <TableHead className="w-20" />
                     </TableRow>
                 </TableHeader>

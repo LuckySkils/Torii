@@ -18,7 +18,7 @@ final class QbitHealthCheck
         try {
             $version = $this->client->getVersion();
             $webapi = $this->client->getWebApiVersion();
-        } catch (ConnectionException) {
+        } catch (ConnectionException $e) {
             return new QbitHealth(
                 reachable: false,
                 version: null,
@@ -27,8 +27,9 @@ final class QbitHealthCheck
                 feed: false,
                 prefs: false,
                 category: false,
+                details: ['reachable' => $e->getMessage()],
             );
-        } catch (QBittorrentException) {
+        } catch (QBittorrentException $e) {
             return new QbitHealth(
                 reachable: true,
                 version: null,
@@ -37,47 +38,76 @@ final class QbitHealthCheck
                 feed: false,
                 prefs: false,
                 category: false,
+                details: ['auth' => $e->getMessage()],
             );
         }
+
+        [$feed, $feedDetail] = $this->checkFeed();
+        [$prefs, $prefsDetail] = $this->checkPreferences();
+        [$category, $categoryDetail] = $this->checkCategory();
 
         return new QbitHealth(
             reachable: true,
             version: $version,
             webapi: $webapi,
             auth: true,
-            feed: $this->checkFeed(),
-            prefs: $this->checkPreferences(),
-            category: $this->checkCategory(),
+            feed: $feed,
+            prefs: $prefs,
+            category: $category,
+            details: array_filter(['feed' => $feedDetail, 'prefs' => $prefsDetail, 'category' => $categoryDetail]),
         );
     }
 
-    private function checkPreferences(): bool
+    /**
+     * @return array{0: bool, 1: string|null}
+     */
+    private function checkPreferences(): array
     {
         try {
             $preferences = $this->client->getPreferences();
+        } catch (Throwable $e) {
+            return [false, $e->getMessage()];
+        }
 
-            return (bool) ($preferences['rss_processing_enabled'] ?? false)
-                && (bool) ($preferences['rss_auto_downloading_enabled'] ?? false);
-        } catch (Throwable) {
-            return false;
+        $off = array_values(array_filter(
+            ['rss_processing_enabled', 'rss_auto_downloading_enabled'],
+            fn (string $preference) => ! (bool) ($preferences[$preference] ?? false),
+        ));
+
+        return $off === []
+            ? [true, null]
+            : [false, 'qBittorrent preference off: '.implode(', ', $off).'.'];
+    }
+
+    /**
+     * @return array{0: bool, 1: string|null}
+     */
+    private function checkFeed(): array
+    {
+        $feedUrl = (string) config('subtracker.feed.url');
+
+        try {
+            return self::feedUrlPresentInTree($this->client->getRssItems(), $feedUrl)
+                ? [true, null]
+                : [false, "FEED_URL {$feedUrl} isn't among qBittorrent's RSS feeds."];
+        } catch (Throwable $e) {
+            return [false, $e->getMessage()];
         }
     }
 
-    private function checkFeed(): bool
+    /**
+     * @return array{0: bool, 1: string|null}
+     */
+    private function checkCategory(): array
     {
-        try {
-            return self::feedUrlPresentInTree($this->client->getRssItems(), (string) config('subtracker.feed.url'));
-        } catch (Throwable) {
-            return false;
-        }
-    }
+        $category = (string) config('subtracker.qbittorrent.category');
 
-    private function checkCategory(): bool
-    {
         try {
-            return array_key_exists((string) config('subtracker.qbittorrent.category'), $this->client->getCategories());
-        } catch (Throwable) {
-            return false;
+            return array_key_exists($category, $this->client->getCategories())
+                ? [true, null]
+                : [false, "QBIT_CATEGORY \"{$category}\" doesn't exist in qBittorrent."];
+        } catch (Throwable $e) {
+            return [false, $e->getMessage()];
         }
     }
 

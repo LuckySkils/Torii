@@ -6,6 +6,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ImageController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ReleaseController;
+use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\ShowController;
 use App\Http\Controllers\ShowTrackingController;
 use App\Http\Controllers\SystemController;
@@ -38,6 +39,8 @@ Route::get('shows/{show}/link/suggestions', [AnimeLinkController::class, 'sugges
 Route::delete('shows/{show}/link/suggestions/{anime}', [AnimeLinkController::class, 'rejectSuggestion'])->name('shows.link.suggestions.reject');
 Route::post('shows/{show}/link', [AnimeLinkController::class, 'store'])->name('shows.link.store');
 Route::delete('shows/{show}/link', [AnimeLinkController::class, 'destroy'])->name('shows.link.destroy');
+
+Route::get('schedule', [ScheduleController::class, 'index'])->name('schedule');
 
 Route::get('anime', [AnimeController::class, 'index'])->name('anime.index');
 Route::get('anime/{anime}', [AnimeController::class, 'show'])->name('anime.show');

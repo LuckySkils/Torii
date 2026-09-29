@@ -47,6 +47,22 @@ export interface Health {
     delay: FeedDelay;
     /** One-time data tasks; null once all have completed. */
     bootstrap: BootstrapProgress | null;
+    /** Every check, ok or not (HealthChecks); the UI renders only the failing ones. */
+    checks: HealthCheck[];
+}
+
+export interface HealthCheck {
+    /** e.g. `qbit.reachable`, `qbit.auth`, `notifications`, `bootstrap`, `feed.polling`. */
+    key: string;
+    ok: boolean;
+    label: string;
+    /** Why it failed (or, when ok, a note such as "Disabled: NTFY_URL is not set."). */
+    detail: string | null;
+    /**
+     * Not run because qBittorrent was unreachable or the login failed ("Not checked: …").
+     * The UI folds these into that one failure instead of badging each.
+     */
+    skipped: boolean;
 }
 
 export type BootstrapTaskState = 'pending' | 'running' | 'failed' | 'done';
@@ -413,4 +429,61 @@ export interface AnimeShowProps {
     /** Newest first. */
     airings: AnimeAiring[];
     linkedShows: AnimeShowLinkedShow[];
+}
+
+/* ---------------------------------------------------------------------------
+ * Schedule (ScheduleController::index)
+ * ------------------------------------------------------------------------- */
+
+/** This episode's state in Torii; null for unlinked anime and future airings. */
+export type ScheduleReleaseState = 'downloaded' | 'released' | 'waiting';
+
+export interface ScheduleAiring {
+    episode: number;
+    /** ISO 8601, UTC. */
+    airsAt: string;
+    isEstimate: boolean;
+    anime: {
+        id: number;
+        titleRomaji: string | null;
+        titleEnglish: string | null;
+        coverUrl: string | null;
+        coverWidth: number | null;
+        coverHeight: number | null;
+        format: string | null;
+        status: string | null;
+        episodesTotal: number | null;
+        season: string | null;
+        seasonYear: number | null;
+        isAdult: boolean;
+    };
+    /** The linked show (a tracked one first when several), via the anime link. */
+    show: { id: number; name: string; isTracked: boolean } | null;
+    releaseState: ScheduleReleaseState | null;
+    /** Episode 1, or the anime started within the last 14 days. */
+    isNewSeries: boolean;
+}
+
+export interface ScheduleFilters {
+    /** ISO 8601; the server applies [from, to). */
+    from: string;
+    to: string;
+    season: AnimeSeason | null;
+    year: number | null;
+    format: string[];
+    linked: 'all' | 'linked' | 'unlinked';
+    tracked: 'all' | 'tracked';
+    adult: AdultFilter;
+}
+
+export interface ScheduleFilterOptions {
+    seasons: AnimeSeason[];
+    years: number[];
+    formats: FacetOption[];
+}
+
+export interface ScheduleProps {
+    airings: ScheduleAiring[];
+    filters: ScheduleFilters;
+    filterOptions: ScheduleFilterOptions;
 }

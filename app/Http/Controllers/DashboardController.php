@@ -9,6 +9,7 @@ use App\Http\Resources\LatestReleaseResource;
 use App\Models\FeedPoll;
 use App\Models\Release;
 use App\Services\Bootstrap\BootstrapRunner;
+use App\Services\Health\HealthChecks;
 use App\Services\QBittorrent\QbitHealthCheck;
 use App\Services\Stats\PollingDelay;
 use Carbon\Carbon;
@@ -18,11 +19,12 @@ use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function __invoke(QbitHealthCheck $healthCheck, PollingDelay $pollingDelay, BootstrapRunner $bootstrap): Response
+    public function __invoke(QbitHealthCheck $healthCheck, PollingDelay $pollingDelay, BootstrapRunner $bootstrap, HealthChecks $healthChecks): Response
     {
         $qbit = $healthCheck->check();
         $lastPoll = FeedPoll::query()->latest('id')->first();
         $nextPollAt = Cache::get('feed:next_poll_at');
+        $bootstrapProgress = $bootstrap->progress();
 
         return Inertia::render('Dashboard', [
             'health' => [
@@ -41,7 +43,9 @@ class DashboardController extends Controller
                 'driver' => config('subtracker.qbittorrent.mode'),
                 'delay' => $pollingDelay->recent(),
                 // Null once every one-time data task has completed (§12).
-                'bootstrap' => $bootstrap->progress(),
+                'bootstrap' => $bootstrapProgress,
+                // Every check as { key, ok, label, detail }; the UI shows only the problems.
+                'checks' => $healthChecks->build($qbit, $lastPoll, $bootstrapProgress),
             ],
             'latestReleases' => $this->latestReleases(),
         ]);

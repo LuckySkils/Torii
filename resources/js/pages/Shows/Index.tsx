@@ -4,6 +4,7 @@ import { BatchHint } from '@/components/subtracker/batch-hint';
 import { BulkBar } from '@/components/subtracker/bulk-bar';
 import { DeleteRuleDialog } from '@/components/subtracker/delete-rule-dialog';
 import { GenreChips } from '@/components/subtracker/facet-filters';
+import { ActionHint, ColumnHint } from '@/components/subtracker/hint';
 import { LatestEpisodeLabel } from '@/components/subtracker/latest-episode-label';
 import { MatchesDialog } from '@/components/subtracker/matches-dialog';
 import { PosterHoverPreview } from '@/components/subtracker/poster-hover-preview';
@@ -25,6 +26,7 @@ import { useRecentActivity } from '@/hooks/use-recent-activity';
 import { useShowsView } from '@/hooks/use-shows-view';
 import AppLayout from '@/layouts/app-layout';
 import { latestEpisodeNumber, posterFor } from '@/lib/anime';
+import { ACTION_HINTS, COLUMN_HINTS } from '@/lib/hints';
 import { POSTER_GRID } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { type RuleState, type ShowsIndexProps } from '@/types/subtracker';
@@ -205,11 +207,21 @@ export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndex
                                             />
                                         </TableHead>
                                         <TableHead className="w-20" />
-                                        <TableHead>Name</TableHead>
-                                        <TableHead>Latest</TableHead>
-                                        <TableHead>Last seen</TableHead>
-                                        <TableHead>Track</TableHead>
-                                        <TableHead>Rule</TableHead>
+                                        <TableHead>
+                                            <ColumnHint label="Name">{COLUMN_HINTS.showName}</ColumnHint>
+                                        </TableHead>
+                                        <TableHead>
+                                            <ColumnHint label="Latest">{COLUMN_HINTS.latest}</ColumnHint>
+                                        </TableHead>
+                                        <TableHead>
+                                            <ColumnHint label="Last seen">{COLUMN_HINTS.lastSeen}</ColumnHint>
+                                        </TableHead>
+                                        <TableHead>
+                                            <ColumnHint label="Track">{COLUMN_HINTS.track}</ColumnHint>
+                                        </TableHead>
+                                        <TableHead>
+                                            <ColumnHint label="Rule">{COLUMN_HINTS.rule}</ColumnHint>
+                                        </TableHead>
                                         <TableHead className="w-20" />
                                     </TableRow>
                                 </TableHeader>
@@ -268,14 +280,16 @@ export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndex
                                                         showId={show.id}
                                                         showName={show.name}
                                                         trigger={
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="size-8"
-                                                                aria-label={`Preview matches for ${show.name}`}
-                                                            >
-                                                                <Eye className="size-4" />
-                                                            </Button>
+                                                            <ActionHint hint={ACTION_HINTS.previewMatches} touchInfo={false}>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="size-8"
+                                                                    aria-label={`Preview matches for ${show.name}`}
+                                                                >
+                                                                    <Eye className="size-4" />
+                                                                </Button>
+                                                            </ActionHint>
                                                         }
                                                     />
                                                     {DELETABLE_RULE_STATES.includes(show.ruleState) && (
@@ -283,14 +297,16 @@ export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndex
                                                             showId={show.id}
                                                             showName={show.name}
                                                             trigger={
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="icon"
-                                                                    className="size-8 text-destructive hover:text-destructive"
-                                                                    aria-label={`Delete rule for ${show.name}`}
-                                                                >
-                                                                    <Trash2 className="size-4" />
-                                                                </Button>
+                                                                <ActionHint hint={ACTION_HINTS.deleteRule} touchInfo={false}>
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="icon"
+                                                                        className="size-8 text-destructive hover:text-destructive"
+                                                                        aria-label={`Delete rule for ${show.name}`}
+                                                                    >
+                                                                        <Trash2 className="size-4" />
+                                                                    </Button>
+                                                                </ActionHint>
                                                             }
                                                         />
                                                     )}

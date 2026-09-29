@@ -135,7 +135,8 @@ test('highestEpisodes reads numbered singles and batch ends, and ignores everyth
     gateRelease($c, 'OVA');
     gateRelease($c, null, batch: true);
 
-    expect(app(ShowAnimeLinker::class)->highestEpisodes([$a->id, $b->id, $c->id]))->toBe([$a->id => 12.5, $b->id => 26.0]);
+    expect(Release::highestEpisodes([$a->id, $b->id, $c->id]))->toBe([$a->id => 12.5, $b->id => 26.0])
+        ->and(Release::highestEpisodes([]))->toBe([]);
 });
 
 test('the episode gate never touches an ambiguous decision or an existing link', function () {
