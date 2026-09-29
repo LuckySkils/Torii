@@ -75,7 +75,7 @@ test('CoverUrls points every cover_url at the payload\'s extraLarge, without req
 test('--upgrade fetches only covers stored from another URL (the old size)', function () {
     Queue::fake();
     $old = metadataAnime(['cover_url' => EXTRA_LARGE_URL]);
-    storedCover($old, 230, 325, LARGE_URL);
+    storedCover($old, 230, 321, LARGE_URL);
     $current = metadataAnime(['cover_url' => EXTRA_LARGE_URL]);
     storedCover($current, 460, 650, EXTRA_LARGE_URL);
     metadataAnime(['cover_url' => EXTRA_LARGE_URL]); // missing: not an upgrade
@@ -95,25 +95,31 @@ test('--all covers every anime with a cover URL', function () {
     $this->artisan('anime:fetch-images --all')->expectsOutputToContain('for 2 anime in the database')->assertSuccessful();
 });
 
-test('an upgrade replaces the stored cover when the sha256 differs, and the props follow the new size', function () {
+test('an upgrade replaces the stored cover when the sha256 differs; size and props are whatever the artwork is', function (int $width, int $height) {
+    // extraLarge is the source artwork: its dimensions vary per title (the old size was ~230x321).
     $anime = metadataAnime(['cover_url' => EXTRA_LARGE_URL, 'season' => 'SUMMER', 'season_year' => 2026]);
-    storedCover($anime, 230, 325, LARGE_URL);
-    Http::fake(['s4.anilist.co/*' => Http::response(pngOf(500, 715, 'bigger'), 200, ['Content-Type' => 'image/png'])]);
+    storedCover($anime, 230, 321, LARGE_URL);
+    $artwork = pngOf($width, $height, 'artwork');
+    Http::fake(['s4.anilist.co/*' => Http::response($artwork, 200, ['Content-Type' => 'image/png'])]);
 
     (new FetchAnimeCover($anime->id))->handle();
 
     $image = AnimeImage::where('anime_id', $anime->id)->sole();
 
-    expect($image->width)->toBe(500)
-        ->and($image->height)->toBe(715)
+    expect($image->width)->toBe($width)
+        ->and($image->height)->toBe($height)
         ->and($image->source_url)->toBe(EXTRA_LARGE_URL)
-        ->and($image->sha256)->toBe(hash('sha256', pngOf(500, 715, 'bigger')));
+        ->and($image->sha256)->toBe(hash('sha256', $artwork));
 
     $this->withoutVite()->get('/anime')->assertInertia(fn (AssertableInertia $page) => $page
-        ->where('anime.data.0.coverWidth', 500)
-        ->where('anime.data.0.coverHeight', 715)
+        ->where('anime.data.0.coverWidth', $width)
+        ->where('anime.data.0.coverHeight', $height)
         ->where('anime.data.0.coverUrl', "/anime/{$anime->id}/cover?v=".substr($image->sha256, 0, 8)));
-});
+})->with([
+    'portrait, twice the old size' => [460, 650],
+    'taller artwork' => [425, 600],
+    'large source' => [700, 1000],
+]);
 
 test('same bytes from the new URL keep the row, but record the URL so --upgrade stops picking it', function () {
     Queue::fake();
@@ -161,7 +167,7 @@ test('a cover that fails for good is recorded on the anime; a later success clea
     $anime = metadataAnime(['cover_url' => EXTRA_LARGE_URL]);
     Http::fake(['s4.anilist.co/*' => Http::sequence()
         ->push('gone', 404, ['Content-Type' => 'text/html'])
-        ->push(pngOf(500, 715), 200, ['Content-Type' => 'image/png'])]);
+        ->push(pngOf(460, 650), 200, ['Content-Type' => 'image/png'])]);
 
     (new FetchAnimeCover($anime->id))->handle();
 
@@ -192,7 +198,7 @@ test('the index queues covers for shown entries without one, once, skipping fail
     $missing = metadataAnime(['title_romaji' => 'A Missing', ...$fall]);
     $failed = metadataAnime(['title_romaji' => 'B Failed', 'cover_error' => '404', 'cover_error_at' => now(), ...$fall]);
     $stored = metadataAnime(['title_romaji' => 'C Stored', ...$fall]);
-    storedCover($stored, 500, 715, EXTRA_LARGE_URL);
+    storedCover($stored, 460, 650, EXTRA_LARGE_URL);
     metadataAnime(['title_romaji' => 'D No URL', ...$fall, 'cover_url' => null]);
 
     $this->get('/anime?season=FALL&year=2026')->assertOk();

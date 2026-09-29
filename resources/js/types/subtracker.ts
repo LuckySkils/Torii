@@ -388,7 +388,11 @@ export interface AnimeFilters {
     genresInclude: string[];
     /** genres_exclude[]: none of these. */
     genresExclude: string[];
+    /** AniList isAdult entries: hidden unless asked for. */
+    adult: AdultFilter;
 }
+
+export type AdultFilter = 'hide' | 'include' | 'only';
 
 export interface AnimeFilterOptions {
     seasons: AnimeSeason[];

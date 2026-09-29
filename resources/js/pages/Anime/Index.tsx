@@ -24,7 +24,8 @@ export default function AnimeIndex({ anime, filters, filterOptions }: AnimeIndex
         filters.linked === 'all' &&
         filters.format.length === 0 &&
         filters.genresInclude.length === 0 &&
-        filters.genresExclude.length === 0;
+        filters.genresExclude.length === 0 &&
+        filters.adult === 'hide';
     const scope = animeSeasonLabel(filters.season, filters.year);
 
     return (

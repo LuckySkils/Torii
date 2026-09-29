@@ -18,7 +18,16 @@ export function AnimeCard({ anime }: { anime: AnimeItem }) {
                     {title}
                 </span>
             </Link>
-            {facts && <span className="truncate text-xs text-muted-foreground large:md:text-sm">{facts}</span>}
+            {(facts || anime.isAdult) && (
+                <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground large:md:text-sm">
+                    {anime.isAdult && (
+                        <span className="shrink-0 rounded border border-rose-500/40 px-1 text-[10px] leading-4 font-medium text-rose-700 dark:text-rose-300">
+                            18+
+                        </span>
+                    )}
+                    <span className="truncate">{facts}</span>
+                </span>
+            )}
             {firstShow && (
                 <Link
                     href={`/shows/${firstShow.id}`}

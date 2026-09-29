@@ -5,7 +5,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 import { type FilterNavigation, type QueryParams } from '@/hooks/use-filter-navigation';
 import { animeSeasonLabel, statusLabel } from '@/lib/anime';
 import { cn } from '@/lib/utils';
-import { type AnimeFilterOptions, type AnimeFilters } from '@/types/subtracker';
+import { type AdultFilter, type AnimeFilterOptions, type AnimeFilters } from '@/types/subtracker';
 import { Loader2, SlidersHorizontal } from 'lucide-react';
 import { useState } from 'react';
 import { FormatFilter, GenreFilter } from './facet-filters';
@@ -25,6 +25,7 @@ export function animeQueryParams(filters: AnimeFilters): QueryParams {
         format: filters.format,
         genres_include: filters.genresInclude,
         genres_exclude: filters.genresExclude,
+        adult: filters.adult,
     };
 }
 
@@ -37,6 +38,7 @@ export const ANY_FILTERS: AnimeFilters = {
     format: [],
     genresInclude: [],
     genresExclude: [],
+    adult: 'hide',
 };
 
 interface AnimeToolbarProps {
@@ -52,6 +54,7 @@ export function AnimeToolbar({ filters, options, nav }: AnimeToolbarProps) {
     const activeCount =
         [filters.season, filters.year, filters.status].filter((value) => value !== null).length +
         (filters.linked !== 'all' ? 1 : 0) +
+        (filters.adult !== 'hide' ? 1 : 0) +
         filters.format.length +
         filters.genresInclude.length +
         filters.genresExclude.length;
@@ -99,6 +102,19 @@ export function AnimeToolbar({ filters, options, nav }: AnimeToolbarProps) {
                 { value: 'no', label: 'Not linked' },
             ]}
             onChange={(value) => set({ linked: (value ?? 'all') as AnimeFilters['linked'] })}
+        />,
+        <FilterSelect
+            key="adult"
+            label="Adult titles"
+            fullWidth={fullWidth}
+            widthClass="w-36"
+            value={filters.adult === 'hide' ? null : filters.adult}
+            anyLabel="Hide adult"
+            options={[
+                { value: 'include', label: 'Include adult' },
+                { value: 'only', label: 'Adult only' },
+            ]}
+            onChange={(value) => set({ adult: (value ?? 'hide') as AdultFilter })}
         />,
     ];
 
@@ -167,7 +183,13 @@ export function AnimeToolbar({ filters, options, nav }: AnimeToolbarProps) {
             <div className="hidden flex-wrap items-center gap-2 sm:flex">
                 {selects(false)}
                 <FormatFilter className="w-36" options={options.formats} selected={filters.format} onChange={(format) => set({ format })} />
-                <GenreFilter className="w-40" options={options.genres} include={filters.genresInclude} exclude={filters.genresExclude} onChange={setGenres} />
+                <GenreFilter
+                    className="w-40"
+                    options={options.genres}
+                    include={filters.genresInclude}
+                    exclude={filters.genresExclude}
+                    onChange={setGenres}
+                />
             </div>
         </div>
     );

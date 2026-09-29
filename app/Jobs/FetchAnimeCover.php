@@ -21,8 +21,9 @@ use Illuminate\Support\Facades\Http;
 use Throwable;
 
 /**
- * Downloads an anime's cover (AniList's largest, ~500x715) into `anime_images`,
- * like FetchShowImage does for posters: size cap, image/* only, must decode,
+ * Downloads an anime's cover into `anime_images`: AniList's largest, which is the
+ * source artwork, so its dimensions vary per title (typically about twice the
+ * old ~230x321). Like FetchShowImage does for posters: size cap, image/* only, must decode,
  * sha256 compare before writing, so an unchanged cover is never rewritten and a
  * changed one (e.g. the old smaller size) is replaced.
  *
