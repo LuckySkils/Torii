@@ -44,4 +44,5 @@ Route::get('schedule', [ScheduleController::class, 'index'])->name('schedule');
 
 Route::get('anime', [AnimeController::class, 'index'])->name('anime.index');
 Route::get('anime/{anime}', [AnimeController::class, 'show'])->name('anime.show');
+Route::get('anime/{id}/card', [AnimeController::class, 'card'])->whereNumber('id')->name('anime.card');
 Route::get('anime/{anime}/cover', [AnimeController::class, 'cover'])->name('anime.cover');

@@ -159,6 +159,19 @@ class Anime extends Model
         return $this->hasMany(ShowAnimeLink::class);
     }
 
+    /**
+     * The show this anime is linked to; with several, a tracked one first, then
+     * the oldest. Expects `links.show` loaded.
+     */
+    public function primaryLinkedShow(): ?Show
+    {
+        return $this->links
+            ->map(fn (ShowAnimeLink $link) => $link->show)
+            ->filter()
+            ->sortBy([fn (Show $a, Show $b) => $b->is_tracked <=> $a->is_tracked, fn (Show $a, Show $b) => $a->id <=> $b->id])
+            ->first();
+    }
+
     public function externalId(string $provider): ?string
     {
         return $this->externalIds->firstWhere('provider', $provider)?->external_id;

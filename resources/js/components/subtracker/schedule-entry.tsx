@@ -6,6 +6,7 @@ import { type ScheduleAiring } from '@/types/subtracker';
 import { Link } from '@inertiajs/react';
 import { Check, Link2 } from 'lucide-react';
 import { type ReactNode } from 'react';
+import { AnimeCardCover, AnimeDetailCard } from './anime-detail-card';
 import { ShowPoster } from './show-poster';
 
 const BADGE =
@@ -90,27 +91,26 @@ export function ScheduleCard({ airing, past }: EntryProps) {
     const title = scheduleTitle(airing.anime);
 
     return (
-        <li className={cn('flex gap-2 rounded-lg border bg-card p-1.5 large:md:gap-2.5 large:md:p-2', past && 'opacity-55')}>
-            <Link href={`/anime/${airing.anime.id}`} className="shrink-0 self-start" tabIndex={-1} aria-hidden>
-                <ShowPoster {...coverPoster(airing.anime)} name={title} className="w-8 large:md:w-12" />
-            </Link>
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="text-[11px] text-muted-foreground tabular-nums large:md:text-xs">
-                    <time dateTime={airing.airsAt} className="font-medium text-foreground">
-                        {timeOfDay.format(new Date(airing.airsAt))}
-                    </time>{' '}
-                    · Ep {airing.episode}
-                </span>
-                <Link
-                    href={`/anime/${airing.anime.id}`}
-                    className="line-clamp-2 text-xs leading-tight font-medium break-words hover:underline large:md:text-sm"
-                    title={title}
-                >
-                    {title}
-                </Link>
-                <ScheduleBadges airing={airing} />
-            </div>
-        </li>
+        <AnimeDetailCard animeId={airing.anime.id} badges={<ScheduleBadges airing={airing} />}>
+            <li className={cn('flex gap-2 rounded-lg border bg-card p-1.5 large:md:gap-2.5 large:md:p-2', past && 'opacity-55')}>
+                <EntryCover airing={airing} title={title} className="w-8 large:md:w-12" />
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="text-[11px] text-muted-foreground tabular-nums large:md:text-xs">
+                        <time dateTime={airing.airsAt} className="font-medium text-foreground">
+                            {timeOfDay.format(new Date(airing.airsAt))}
+                        </time>{' '}
+                        · Ep {airing.episode}
+                    </span>
+                    <Link
+                        href={`/anime/${airing.anime.id}`}
+                        className="line-clamp-2 text-xs leading-tight font-medium break-words hover:underline large:md:text-sm"
+                    >
+                        {title}
+                    </Link>
+                    <ScheduleBadges airing={airing} />
+                </div>
+            </li>
+        </AnimeDetailCard>
     );
 }
 
@@ -119,27 +119,34 @@ export function ScheduleRow({ airing, past }: EntryProps) {
     const title = scheduleTitle(airing.anime);
 
     return (
-        <li className={cn('flex items-center gap-3 px-3 py-2 large:md:gap-4 large:md:py-3', past && 'opacity-55')}>
-            <time dateTime={airing.airsAt} className="w-12 shrink-0 text-sm font-medium tabular-nums large:md:w-16 large:md:text-base">
-                {timeOfDay.format(new Date(airing.airsAt))}
-            </time>
-            <Link href={`/anime/${airing.anime.id}`} className="shrink-0" tabIndex={-1} aria-hidden>
-                <ShowPoster {...coverPoster(airing.anime)} name={title} className="w-10 large:md:w-14" />
+        <AnimeDetailCard animeId={airing.anime.id} badges={<ScheduleBadges airing={airing} />}>
+            <li className={cn('flex items-center gap-3 px-3 py-2 large:md:gap-4 large:md:py-3', past && 'opacity-55')}>
+                <time dateTime={airing.airsAt} className="w-12 shrink-0 text-sm font-medium tabular-nums large:md:w-16 large:md:text-base">
+                    {timeOfDay.format(new Date(airing.airsAt))}
+                </time>
+                <EntryCover airing={airing} title={title} className="w-10 large:md:w-14" />
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <span className="flex min-w-0 items-baseline gap-2">
+                        <Link href={`/anime/${airing.anime.id}`} className="truncate text-sm font-medium hover:underline large:md:text-base">
+                            {title}
+                        </Link>
+                        <span className="shrink-0 text-xs text-muted-foreground tabular-nums large:md:text-sm">Ep {airing.episode}</span>
+                    </span>
+                    <ScheduleBadges airing={airing} />
+                </div>
+            </li>
+        </AnimeDetailCard>
+    );
+}
+
+/** The entry's cover: a link to the anime page, or on touch the way to open its detail card. */
+function EntryCover({ airing, title, className }: { airing: ScheduleAiring; title: string; className: string }) {
+    return (
+        <AnimeCardCover>
+            <Link href={`/anime/${airing.anime.id}`} className="shrink-0 self-start" aria-label={`${title}: details`}>
+                <ShowPoster {...coverPoster(airing.anime)} name={title} className={className} />
             </Link>
-            <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <span className="flex min-w-0 items-baseline gap-2">
-                    <Link
-                        href={`/anime/${airing.anime.id}`}
-                        className="truncate text-sm font-medium hover:underline large:md:text-base"
-                        title={title}
-                    >
-                        {title}
-                    </Link>
-                    <span className="shrink-0 text-xs text-muted-foreground tabular-nums large:md:text-sm">Ep {airing.episode}</span>
-                </span>
-                <ScheduleBadges airing={airing} />
-            </div>
-        </li>
+        </AnimeCardCover>
     );
 }
 

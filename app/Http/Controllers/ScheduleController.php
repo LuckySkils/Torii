@@ -8,8 +8,6 @@ use App\Enums\AnimeSeason;
 use App\Models\Anime;
 use App\Models\AnimeAiring;
 use App\Models\Release;
-use App\Models\Show;
-use App\Models\ShowAnimeLink;
 use App\Services\Metadata\AnimeFacets;
 use App\Services\Metadata\Matching\AnimeMatcher;
 use Carbon\CarbonImmutable;
@@ -111,7 +109,7 @@ class ScheduleController extends Controller
     private function row(AnimeAiring $airing, Collection $releases, array $highestEpisodes, CarbonInterface $now): array
     {
         $anime = $airing->anime;
-        $show = $this->linkedShow($anime);
+        $show = $anime->primaryLinkedShow();
 
         return [
             'episode' => $airing->episode,
@@ -151,18 +149,6 @@ class ScheduleController extends Controller
         return $anime->episodes_total !== null
             && $highestEpisode !== null
             && $highestEpisode > $anime->episodes_total + AnimeMatcher::EPISODE_TOLERANCE;
-    }
-
-    /**
-     * The show an anime is linked to; with several, a tracked one first.
-     */
-    private function linkedShow(Anime $anime): ?Show
-    {
-        return $anime->links
-            ->map(fn (ShowAnimeLink $link) => $link->show)
-            ->filter()
-            ->sortBy([fn ($a, $b) => $b->is_tracked <=> $a->is_tracked, fn ($a, $b) => $a->id <=> $b->id])
-            ->first();
     }
 
     /**

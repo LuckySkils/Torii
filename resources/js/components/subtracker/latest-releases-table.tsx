@@ -5,6 +5,8 @@ import { formatDelay } from '@/lib/dates';
 import { COLUMN_HINTS } from '@/lib/hints';
 import { type DashboardRelease } from '@/types/subtracker';
 import { Link } from '@inertiajs/react';
+import { type ReactNode } from 'react';
+import { AnimeCardCover, AnimeDetailCard } from './anime-detail-card';
 import { AnimeLinkIndicator } from './anime-link-indicator';
 import { CopyLinkButton } from './copy-link-button';
 import { DispatchBadge } from './dispatch-badge';
@@ -20,14 +22,55 @@ interface LatestReleasesTableProps {
     releases: DashboardRelease[];
 }
 
-export function ReleaseThumb({ release, className = 'w-10' }: { release: DashboardRelease; className?: string }) {
-    if (release.show === null) {
-        return <div className={`${className} aspect-[2/3] shrink-0 rounded-md bg-muted`} />;
+/** A release's own markers, repeated inside its detail card. */
+function releaseBadges(release: DashboardRelease): ReactNode {
+    const premiere = isPremiere(release);
+
+    if (!release.isNewShow && !premiere) {
+        return undefined;
     }
 
     return (
-        <Link href={`/shows/${release.show.id}`} className="block shrink-0" tabIndex={-1} aria-hidden>
-            <ShowPoster {...posterFor(release.show)} name={release.show.name} className={className} />
+        <span className="flex flex-wrap items-center gap-1">
+            {release.isNewShow && <NewShowBadge />}
+            {premiere && <FirstEpisodeBadge />}
+        </span>
+    );
+}
+
+/**
+ * The release's poster, linking to its show. When the show is linked to an anime,
+ * hovering (or, on touch, tapping) it opens the anime's detail card; otherwise the
+ * table keeps its enlarged-poster preview (`preview`) and the phone card a plain link.
+ */
+export function ReleaseThumb({ release, className = 'w-10', preview = false }: { release: DashboardRelease; className?: string; preview?: boolean }) {
+    const show = release.show;
+
+    if (show === null) {
+        return <div className={`${className} aspect-[2/3] shrink-0 rounded-md bg-muted`} />;
+    }
+
+    if (show.anime) {
+        return (
+            <AnimeDetailCard animeId={show.anime.id} badges={releaseBadges(release)}>
+                <span className="block shrink-0">
+                    <AnimeCardCover>
+                        <Link href={`/shows/${show.id}`} className="block" aria-label={`${show.name}: details`}>
+                            <ShowPoster {...posterFor(show)} name={show.name} className={className} />
+                        </Link>
+                    </AnimeCardCover>
+                </span>
+            </AnimeDetailCard>
+        );
+    }
+
+    if (preview) {
+        return <PosterHoverPreview {...posterFor(show)} name={show.name} thumbClassName={className} href={`/shows/${show.id}`} />;
+    }
+
+    return (
+        <Link href={`/shows/${show.id}`} className="block shrink-0" tabIndex={-1} aria-hidden>
+            <ShowPoster {...posterFor(show)} name={show.name} className={className} />
         </Link>
     );
 }
@@ -77,16 +120,7 @@ export function LatestReleasesTable({ releases }: LatestReleasesTableProps) {
                     {releases.map((release) => (
                         <TableRow key={release.id}>
                             <TableCell className="py-2">
-                                {release.show ? (
-                                    <PosterHoverPreview
-                                        {...posterFor(release.show)}
-                                        name={release.show.name}
-                                        thumbClassName="w-10"
-                                        href={`/shows/${release.show.id}`}
-                                    />
-                                ) : (
-                                    <ReleaseThumb release={release} />
-                                )}
+                                <ReleaseThumb release={release} preview />
                             </TableCell>
                             <TableCell className="max-w-56">
                                 {release.show ? (

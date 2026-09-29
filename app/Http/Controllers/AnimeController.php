@@ -13,13 +13,19 @@ use App\Models\AnimeImage;
 use App\Services\Metadata\AnimeFacets;
 use App\Services\Metadata\AnimeSeasons;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use Inertia\Response as InertiaResponse;
 
 class AnimeController extends Controller
 {
+    private const CARD_CACHE_SECONDS = 120;
+
+    private const CARD_DESCRIPTION_LENGTH = 600;
+
     /**
      * Browsable season list. With no `season`/`year` params at all it opens on the
      * current season; an explicitly empty one means "any".
@@ -140,6 +146,89 @@ class AnimeController extends Controller
                 'linkedAt' => $link->linked_at->toIso8601String(),
             ])->values()->all(),
         ]);
+    }
+
+    /**
+     * A small JSON summary for the schedule's hover cards; the schedule rows stay
+     * light and this fills in the rest on demand. Cached for CARD_CACHE_SECONDS,
+     * so repeated hovers don't query at all (hence an id, not route model binding).
+     * `description` is AniList's HTML as stored, cut to about CARD_DESCRIPTION_LENGTH
+     * characters; the frontend sanitizes it.
+     */
+    public function card(int $id): JsonResponse
+    {
+        $card = Cache::remember("anime:card:{$id}", self::CARD_CACHE_SECONDS, function () use ($id): ?array {
+            $anime = Anime::query()
+                ->select(['id', 'title_romaji', 'title_english', 'format', 'status', 'season', 'season_year', 'episodes_total', 'duration_minutes', 'description', 'genres', 'is_adult', 'site_url'])
+                ->with([
+                    // Only what the cover URL and dimensions need, never `data`.
+                    'image' => fn ($q) => $q->select(['id', 'anime_id', 'sha256', 'width', 'height']),
+                    'links.show' => fn ($q) => $q->select(['id', 'name', 'is_tracked']),
+                ])
+                ->find($id);
+
+            if ($anime === null) {
+                return null;
+            }
+
+            [$description, $truncated] = $this->truncateHtml($anime->description, self::CARD_DESCRIPTION_LENGTH);
+            $show = $anime->primaryLinkedShow();
+
+            return [
+                'id' => $anime->id,
+                'titleRomaji' => $anime->title_romaji,
+                'titleEnglish' => $anime->title_english,
+                'coverUrl' => $anime->image?->url(),
+                'coverWidth' => $anime->image?->width,
+                'coverHeight' => $anime->image?->height,
+                'format' => $anime->format,
+                'status' => $anime->status,
+                'season' => $anime->season,
+                'seasonYear' => $anime->season_year,
+                'episodesTotal' => $anime->episodes_total,
+                'durationMinutes' => $anime->duration_minutes,
+                'description' => $description,
+                'descriptionTruncated' => $truncated,
+                'genres' => $anime->genres ?? [],
+                'isAdult' => $anime->is_adult,
+                'siteUrl' => $anime->site_url,
+                'linkedShow' => $show === null ? null : ['id' => $show->id, 'name' => $show->name, 'isTracked' => $show->is_tracked],
+            ];
+        });
+
+        if ($card === null) {
+            abort(404);
+        }
+
+        return response()->json($card);
+    }
+
+    /**
+     * Cuts HTML to about $length characters without leaving half a tag: back to
+     * before an unclosed `<`, then to the last word break. Elements left open are
+     * closed by the frontend's sanitizer.
+     *
+     * @return array{0: string|null, 1: bool}
+     */
+    private function truncateHtml(?string $html, int $length): array
+    {
+        if ($html === null || mb_strlen($html) <= $length) {
+            return [$html, false];
+        }
+
+        $cut = mb_substr($html, 0, $length);
+
+        $open = mb_strrpos($cut, '<');
+        if ($open !== false && mb_strrpos($cut, '>') < $open) {
+            $cut = mb_substr($cut, 0, $open);
+        }
+
+        $space = mb_strrpos($cut, ' ');
+        if ($space !== false && $space > $length * 0.8) {
+            $cut = mb_substr($cut, 0, $space);
+        }
+
+        return [rtrim($cut), true];
     }
 
     /** Serves the stored cover, exactly like ImageController::show serves posters. */

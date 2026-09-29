@@ -431,6 +431,29 @@ export interface AnimeShowProps {
     linkedShows: AnimeShowLinkedShow[];
 }
 
+/** GET /anime/{id}/card — the hover/tap detail card (AnimeController::card, cached 2 minutes). */
+export interface AnimeCardData {
+    id: number;
+    titleRomaji: string | null;
+    titleEnglish: string | null;
+    coverUrl: string | null;
+    coverWidth: number | null;
+    coverHeight: number | null;
+    format: string | null;
+    status: string | null;
+    season: string | null;
+    seasonYear: number | null;
+    episodesTotal: number | null;
+    durationMinutes: number | null;
+    /** AniList HTML, cut server-side to a few hundred characters; may leave elements open. Unsanitised. */
+    description: string | null;
+    descriptionTruncated: boolean;
+    genres: string[];
+    isAdult: boolean;
+    siteUrl: string | null;
+    linkedShow: { id: number; name: string; isTracked: boolean } | null;
+}
+
 /* ---------------------------------------------------------------------------
  * Schedule (ScheduleController::index)
  * ------------------------------------------------------------------------- */
