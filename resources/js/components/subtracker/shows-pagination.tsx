@@ -4,7 +4,9 @@ import { type PaginationLinkItem } from '@/types/subtracker';
 
 interface ShowsPaginationProps {
     links: PaginationLinkItem[];
-    onNavigate: (url: string) => void;
+    /** Builds each link from the page's own filter state; the paginator's `url` drops empty params. */
+    hrefFor: (page: number) => string;
+    onNavigate: (page: number) => void;
 }
 
 /**
@@ -13,7 +15,7 @@ interface ShowsPaginationProps {
  * overlap their neighbours. Below `sm`, only the first, last, current and
  * adjacent pages are kept, so 10+ pages still fit on a phone.
  */
-export function ShowsPagination({ links, onNavigate }: ShowsPaginationProps) {
+export function ShowsPagination({ links, hrefFor, onNavigate }: ShowsPaginationProps) {
     const numbered = links.slice(1, -1);
     const current = numbered.find((link) => link.active)?.page ?? 1;
     const last = numbered.reduce((max, link) => Math.max(max, link.page ?? 0), 1);
@@ -35,19 +37,19 @@ export function ShowsPagination({ links, onNavigate }: ShowsPaginationProps) {
             <PaginationContent className="gap-1 sm:gap-1.5">
                 {links.map((link, index) => (
                     <PaginationItem key={index} className={cn(!keepOnPhone(link, index) && 'hidden sm:list-item')}>
-                        {link.url === null ? (
+                        {link.url === null || link.page === null ? (
                             <span
-                                className="flex h-10 min-w-10 items-center justify-center px-2 text-sm whitespace-nowrap sm:px-3 text-muted-foreground opacity-50"
+                                className="flex h-10 min-w-10 items-center justify-center px-2 text-sm whitespace-nowrap text-muted-foreground opacity-50 sm:px-3"
                                 dangerouslySetInnerHTML={{ __html: link.label }}
                             />
                         ) : (
                             <PaginationLink
-                                href={link.url}
+                                href={hrefFor(link.page)}
                                 isActive={link.active}
                                 className="w-auto min-w-10 px-2 whitespace-nowrap sm:px-3"
                                 onClick={(e) => {
                                     e.preventDefault();
-                                    onNavigate(link.url as string);
+                                    onNavigate(link.page as number);
                                 }}
                                 dangerouslySetInnerHTML={{ __html: link.label }}
                             />

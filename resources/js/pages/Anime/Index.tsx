@@ -9,7 +9,7 @@ import { animeSeasonLabel } from '@/lib/anime';
 import { POSTER_GRID } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { type AnimeIndexProps } from '@/types/subtracker';
-import { Head, router } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Anime', href: '/anime' }];
 
@@ -70,7 +70,7 @@ export default function AnimeIndex({ anime, filters, filterOptions }: AnimeIndex
 
                 {anime.meta.last_page > 1 && (
                     <div className="sticky bottom-0 z-30 -mx-3 border-t bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:-mx-4 sm:px-4">
-                        <ShowsPagination links={anime.meta.links} onNavigate={(url) => router.get(url, {}, { preserveState: true, preserveScroll: true })} />
+                        <ShowsPagination links={anime.meta.links} hrefFor={nav.pageHref} onNavigate={nav.goToPage} />
                     </div>
                 )}
             </div>
