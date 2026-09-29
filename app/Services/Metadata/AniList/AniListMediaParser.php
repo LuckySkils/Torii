@@ -42,9 +42,9 @@ final class AniListMediaParser
             startDate: $this->fuzzyDate($media['startDate'] ?? null),
             endDate: $this->fuzzyDate($media['endDate'] ?? null),
             durationMinutes: $this->int($media['duration'] ?? null),
-            // `large` (~230x325, like SubsPlease's posters) keeps list pages light;
-            // extraLarge averages ~240 KB. Every variant stays in the raw payload.
-            coverUrl: $this->string($cover['large'] ?? null) ?? $this->string($cover['extraLarge'] ?? null) ?? $this->string($cover['medium'] ?? null),
+            // The largest (~500x715, ~240 KB): one stored size, which the frontend
+            // downscales. Every variant stays in the raw payload.
+            coverUrl: $this->string($cover['extraLarge'] ?? null) ?? $this->string($cover['large'] ?? null) ?? $this->string($cover['medium'] ?? null),
             bannerUrl: $this->string($media['bannerImage'] ?? null),
             siteUrl: $this->string($media['siteUrl'] ?? null),
             isAdult: (bool) ($media['isAdult'] ?? false),

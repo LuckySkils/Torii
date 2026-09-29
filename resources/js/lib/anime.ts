@@ -60,14 +60,21 @@ export function animeSeasonLabel(season: string | null, year: number | null): st
     return name ?? (year ? String(year) : null);
 }
 
-/** "12 / 24" (aired / total), or whichever half is known. */
-export function episodeCount(aired: number | null, total: number | null): string | null {
+/**
+ * "12 / 24" (aired / total), or whichever half is known. With no total, nothing
+ * aired and the show not airing, "not started" instead of "0 aired".
+ */
+export function episodeCount(aired: number | null, total: number | null, status: string | null = null): string | null {
     if (aired !== null && total !== null) {
         return `${aired} / ${total} eps`;
     }
 
     if (total !== null) {
         return `${total} ${total === 1 ? 'ep' : 'eps'}`;
+    }
+
+    if (aired === 0 && status !== 'RELEASING') {
+        return 'not started';
     }
 
     return aired !== null ? `${aired} aired` : null;

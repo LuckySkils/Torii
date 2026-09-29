@@ -6,6 +6,7 @@ namespace App\Jobs;
 
 use App\Contracts\MetadataProvider;
 use App\Enums\AnimeSeason;
+use App\Models\Anime;
 use App\Models\AnimeExternalId;
 use App\Services\Metadata\AnimeSeasons;
 use App\Services\Metadata\AnimeSyncer;
@@ -20,7 +21,7 @@ use Illuminate\Queue\SerializesModels;
 
 /**
  * Upserts every anime of the given seasons (and, with $allLinked, refreshes every
- * linked anime), then queues covers for new entries (and changed cover URLs) and
+ * linked anime), then queues covers for new entries and changed cover URLs, and
  * runs automatic matching.
  */
 final class SyncAnimeSeasons implements ShouldBeUnique, ShouldQueue
@@ -76,7 +77,7 @@ final class SyncAnimeSeasons implements ShouldBeUnique, ShouldQueue
         return now()->addHours(6);
     }
 
-    public function handle(MetadataProvider $provider, AnimeSyncer $syncer, AnimeSeasons $animeSeasons): void
+    public function handle(MetadataProvider $provider, AnimeSyncer $syncer): void
     {
         $newIds = [];
         $coverIds = [];
@@ -138,13 +139,14 @@ final class SyncAnimeSeasons implements ShouldBeUnique, ShouldQueue
         logger()->info('Anime season sync finished', ['entries' => $counts, 'new' => count($newIds), 'cover_changed' => count($coverIds)]);
 
         // New entries, and existing ones whose stored cover is now stale.
-        $eligible = $animeSeasons->coverEligible()
+        $covers = Anime::query()
+            ->whereNotNull('cover_url')
             ->whereIn('id', array_unique([...$newIds, ...$coverIds]))
             ->orderBy('id')
             ->pluck('id');
 
-        foreach ($eligible->values() as $i => $animeId) {
-            FetchAnimeCover::dispatch($animeId)->delay(now()->addSeconds($i * 2));
+        foreach ($covers as $animeId) {
+            FetchAnimeCover::dispatchSpaced($animeId);
         }
 
         MatchShowsToAnime::dispatch();

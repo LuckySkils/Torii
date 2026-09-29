@@ -191,6 +191,7 @@ test('the real tasks, in order, with their dependencies', function () {
         ['anime.initial-sync', []],
         ['anime.initial-airings', ['anime.initial-sync']],
         ['anime.initial-covers', ['anime.initial-sync']],
+        ['anime.full-covers', ['anime.initial-covers']],
     ]);
 });
 

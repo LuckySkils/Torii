@@ -7,7 +7,7 @@ import { ShowPoster } from './show-poster';
 
 export function AnimeCard({ anime }: { anime: AnimeItem }) {
     const title = animeTitle(anime);
-    const facts = [formatLabel(anime.format), episodeCount(anime.episodesAired, anime.episodesTotal)].filter(Boolean).join(' · ');
+    const facts = [formatLabel(anime.format), episodeCount(anime.episodesAired, anime.episodesTotal, anime.status)].filter(Boolean).join(' · ');
     const [firstShow, ...otherShows] = anime.linkedShows;
 
     return (

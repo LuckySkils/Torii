@@ -35,6 +35,8 @@ class Anime extends Model
         'end_date',
         'duration_minutes',
         'cover_url',
+        'cover_error',
+        'cover_error_at',
         'banner_url',
         'site_url',
         'is_adult',
@@ -55,6 +57,7 @@ class Anime extends Model
             'duration_minutes' => 'integer',
             'is_adult' => 'boolean',
             'synced_at' => 'datetime',
+            'cover_error_at' => 'datetime',
         ];
     }
 

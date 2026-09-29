@@ -16,7 +16,7 @@ Torii watches the SubsPlease RSS feed, builds a catalog of every show it sees, a
 - creates an RSS auto-download rule in qBittorrent for future episodes;
 - downloads a single batch torrent instead, when a finished season is available as a batch.
 
-It can also send phone notifications when a tracked show gets a new episode and when an episode finishes downloading.
+Shows are matched against AniList, so the catalog carries real cover art, genres, descriptions, episode counts and airing schedules. It can also send phone notifications when a tracked show gets a new episode and when an episode finishes downloading.
 
 It runs on your local network. There are no accounts and no cloud.
 
@@ -26,7 +26,7 @@ It runs on your local network. There are no accounts and no cloud.
 
 ## Features
 
-- **Show catalog:** every show from the SubsPlease feed, with posters, premiere season and year, search, filters and sorting.
+- **Show catalog:** every show from the SubsPlease feed, with cover art, premiere season and year, search, filters and sorting, as a poster grid or a compact list.
 - **One-click tracking:**
   - tracking a show queues every episode Torii knows about (the highest version per episode, e.g. `v2` over the original);
   - it then creates a qBittorrent RSS rule for new episodes;
@@ -41,24 +41,32 @@ It runs on your local network. There are no accounts and no cloud.
   - a reconcile job fixes drift.
 - **Instant downloads:** when Torii sees a new episode of a tracked show, it tells qBittorrent to refresh the feed right away, instead of waiting for qBittorrent's own RSS timer.
 - **Download tracking:** Torii checks qBittorrent every minute and marks releases as downloaded, whether it queued them itself or an RSS rule did.
-- **Notifications (optional):** push notifications through [ntfy](https://ntfy.sh) for "new episode out" and "episode downloaded". You can use the bundled ntfy container, your own ntfy server, or the public ntfy.sh.
+- **Anime metadata (AniList):**
+  - the previous, current and next season are synced weekly, and shows are matched to them automatically;
+  - cover art, genres, descriptions, format, episode counts and airing schedules;
+  - an **airing window** showing the previous, next and following episode at a glance, including *"Ep 13 aired, not released yet"* when an episode exists but SubsPlease hasn't posted it;
+  - a **review queue** for anything the matcher wasn't sure about, with a search dialog for linking by hand;
+  - a browsable `/anime` section with season, year, status, format and genre filters, where genres can be included *and* excluded;
+  - matching is deliberately cautious: ambiguous candidates, and ones whose episode counts don't fit, become suggestions rather than links, and once you unlink something it stays unlinked.
+- **Notifications (optional):** push notifications through [ntfy](https://ntfy.sh) for "new episode out" and "episode downloaded". Use the bundled ntfy container, your own server, or the public ntfy.sh.
 - **Categories:** everything is added with a configurable qBittorrent category, so tools that organize by category (Shoko, Sonarr-style setups, custom scripts) keep working.
-- **Posters** are fetched once from SubsPlease and stored in the database, with a manual reload for shows whose art appears later.
-- **Release log:** every feed item is recorded with its publish time and the time Torii saw it. This is the groundwork for adaptive polling.
+- **Works on a phone:** responsive throughout, installable to the home screen over HTTPS, with a light/dark theme and a density toggle for large monitors.
+- **Release log:** every feed item is recorded with its publish time and the time Torii saw it, so the dashboard can show how quickly releases are spotted.
 
 ## How it works
 
 ```
-SubsPlease RSS ──► Torii poller ──► PostgreSQL (shows, releases, polls, posters)
+SubsPlease RSS ──► Torii poller ──► PostgreSQL (shows, releases, polls, anime, covers)
                         │
                         ├─► qBittorrent WebAPI: RSS rules for tracked shows
                         ├─► qBittorrent WebAPI: direct adds for known episodes and batches
                         ├─► "refresh feed now" nudge when a tracked show gets a new episode
                         ├─◄ qBittorrent WebAPI: completed torrents → "downloaded" status
+                        ├─◄ AniList GraphQL: seasons, schedules, covers, descriptions
                         └─► ntfy (optional): new-episode and downloaded notifications
 ```
 
-qBittorrent does the downloading. Torii decides what to download and keeps qBittorrent's rules in sync.
+qBittorrent does the downloading. Torii decides what to download, keeps qBittorrent's rules in sync, and enriches its catalog from AniList.
 
 ## Installation with Docker (recommended)
 
@@ -77,7 +85,9 @@ The image is published at `ghcr.io/luckyskils/torii` for amd64 and arm64. It con
    ```
 4. Open `http://<host>:8080`.
 
-On first start, Torii generates its app key, runs the database migrations, polls the feed and fetches posters on its own. The dashboard's health strip shows whether qBittorrent is reachable. For details, run `docker compose exec torii php artisan qbit:setup --self-test`.
+On first start Torii generates its app key, runs the migrations, and then bootstraps itself: it polls the feed, fetches posters, syncs three AniList seasons, matches shows against them and downloads cover art. That work is queued, so the UI is usable straight away and the dashboard shows the progress. Bootstrap steps added in later releases run once on the next start, so an existing install fills in new data by itself.
+
+The dashboard's health strip shows whether qBittorrent is reachable. For details, run `docker compose exec torii php artisan qbit:setup --self-test`.
 
 **Updating:**
 ```bash
@@ -95,6 +105,7 @@ docker compose exec -T db pg_dump -U torii torii | gzip > torii-$(date +%F).sql.
 - **qBittorrent on the same host:** set `QBIT_URL` to the host's LAN IP, not `localhost`. Inside a container, `localhost` is the container itself.
 - **qBittorrent's auth bypass:** requests from Torii come from Docker's internal network, not your LAN. Either set `QBIT_USERNAME`/`QBIT_PASSWORD`, or add `172.16.0.0/12` (Docker's default range) to qBittorrent's "Bypass authentication for clients in whitelisted IP subnets".
 - **Adding settings:** a value in `.env` reaches the container only if `docker-compose.yml` lists it under `torii → environment:`. The shipped file lists the common settings. For others (e.g. `NOTIFY_REPACKS`), add a line there as well.
+- **Behind a reverse proxy:** set `APP_URL` to the external HTTPS address. Torii trusts proxy headers, so assets and redirects follow it. Over HTTPS the browser also offers to install Torii to the home screen.
 - **openmediavault (compose plugin):** paste `docker-compose.yml` into the compose field and the contents of `.env` into the environment field, then use **Up**, not Restart, after changes; only Up applies new settings. The plugin saves the environment as `<name>.env` next to `<name>.yml`, so you can add `env_file: <name>.env` to the `torii` service to pass every variable automatically.
 
 ### Notifications (optional)
@@ -103,7 +114,7 @@ Torii publishes to any ntfy server. The compose file includes an optional ntfy c
 
 1. In `.env`, uncomment the notification block and set `NTFY_BASE_URL` to the address your phone uses to reach ntfy.
 2. Start it: `docker compose up -d`. `COMPOSE_PROFILES=notifications` also starts the ntfy container.
-3. Create a user (the password is your phone app login) and a token for Torii:
+3. Create a user (its password is your phone app login) and a token for Torii:
    ```bash
    docker compose exec ntfy ntfy user add --role=admin <name>
    docker compose exec ntfy ntfy token add <name>
@@ -141,16 +152,17 @@ The `.env.example` in the repo is written for Docker. For a manual install, also
 ```bash
 php artisan migrate
 php artisan qbit:setup --self-test   # checks qBittorrent, adds the feed and category
-php artisan feed:poll --force        # first poll, fills the catalog
-php artisan images:fetch --missing   # posters
+php artisan torii:bootstrap          # first poll, posters, AniList seasons, matching, covers
 ```
+
+`torii:bootstrap` only queues the work, so a queue worker has to be running for it to finish.
 
 Torii needs three processes: the web server, the scheduler, and a queue worker.
 
 ```bash
 php artisan serve          # web UI on http://localhost:8000
-php artisan schedule:work  # polls the feed, checks downloads, reconciles rules
-php artisan queue:work     # syncs rules, queues torrents, fetches posters, sends notifications
+php artisan schedule:work  # polls the feed, checks downloads, reconciles rules, syncs AniList
+php artisan queue:work     # syncs rules, queues torrents, fetches images, sends notifications
 ```
 
 For a permanent setup, run these under systemd or Supervisor. Restart `queue:work` after every update, because workers keep the old code in memory.
@@ -170,6 +182,8 @@ For a permanent setup, run these under systemd or Supervisor. Restart `queue:wor
 | `FEED_URL` | `https://subsplease.org/rss/?r=1080` | SubsPlease feed to track |
 | `FEED_POLL_BASE_MINUTES` | `15` | Normal poll interval |
 | `FEED_PUBDATE_OFFSET_MINUTES` | `-420` | Correction for the feed's timestamps. SubsPlease labels them `+0000`, but their clock runs 7 hours behind UTC, so Torii shifts every release time 7 hours later to get true UTC. If their offset follows US daylight saving, this will need to be `-480` from November; the dashboard's median polling delay drifting by about an hour is the sign. After changing it, run `releases:fix-published`. |
+| `METADATA_PROVIDER` | `anilist` | Metadata source. Providers sit behind an interface, so others can be added. |
+| `ANILIST_REQUESTS_PER_MINUTE` | `25` | Self-imposed throttle. AniList documents 90/min but has long run degraded at 30/min, so Torii stays below that. |
 | `APP_URL` | `http://localhost:8080` | Address you open Torii at |
 | `TORII_PORT` | `8080` | Docker: host port for the web UI |
 | `TORII_DATA_DIR` | `./data` | Docker: host folder for the database, app key and ntfy data |
@@ -186,14 +200,19 @@ In qBittorrent, RSS processing and RSS auto-downloading must be enabled. `php ar
 
 ## Commands
 
-With Docker, prefix these with `docker compose exec torii php artisan`. Most of them also have a button on the dashboard.
+With Docker, prefix these with `docker compose exec torii php artisan`. Most of them also have a button in the UI.
 
 | Command | Purpose |
 |---|---|
+| `torii:bootstrap {--list} {--force=key}` | Run the one-time setup tasks (feed poll, posters, AniList seasons, matching, covers). Runs at container start; each task runs once, and failed ones retry on the next start. |
 | `feed:poll {--force}` | Poll the feed (the scheduler runs it every minute; it only fetches when due) |
 | `qbit:setup {--fix-prefs} {--self-test}` | Check the qBittorrent connection, feed, category and preferences |
 | `qbit:reconcile` | Bring qBittorrent rules in line with tracked shows (also runs hourly) |
 | `qbit:check-completed` | Mark finished downloads (also runs every minute) |
+| `anime:sync-season {--weekly}` | Sync AniList seasons and re-run matching (`--weekly`: previous, current and next season plus linked anime; runs weekly) |
+| `anime:sync-airings` | Refresh airing schedules and episode counts (runs daily) |
+| `anime:match {--dry-run}` | Match shows against stored anime without syncing |
+| `anime:fetch-images {--missing}` | Download AniList cover art |
 | `images:fetch {--missing} {--all}` | Fetch posters from SubsPlease |
 | `shows:recompute-premiere` | Recalculate premiere dates and seasons |
 | `releases:recheck-errors` | Re-check failed queue attempts against qBittorrent |
@@ -201,16 +220,18 @@ With Docker, prefix these with `docker compose exec torii php artisan`. Most of 
 
 ## Limitations
 
-- Torii can only queue episodes it has seen, either in the RSS feed (a rolling window of a few days) or through SubsPlease's search API. It doesn't search other trackers.
+- Torii can only queue episodes it has seen in the RSS feed, which is a rolling window of a few days. It doesn't search other trackers.
 - It relies on SubsPlease's RSS feed and its undocumented site API. If SubsPlease changes either, parts of Torii may break until they're updated.
+- Metadata depends on AniList, polled under a conservative rate limit. Torii works normally with the metadata layer empty or AniList unreachable.
+- Matching is name-based. Split-cour titles (e.g. "4th Season Part 1 & 2") and shows numbered on from an earlier season usually need linking by hand.
 - It is single-user with no auth, and meant for a home network.
 
 ## Roadmap
 
-- Release statistics and adaptive polling: poll more often around the times tracked shows usually release, so new-episode notifications arrive sooner.
+- A schedule view: what airs today and this week, built on the stored airing times.
 - Backfill of older episodes via the SubsPlease search API.
+- Additional release sources beyond SubsPlease.
 - Versioned releases (`latest` = newest release, `edge` = main branch).
-- Optional metadata (English titles, descriptions) from AniList.
 
 ## Tech stack
 
@@ -231,7 +252,7 @@ The project was built with LLM assistance.
 
 ## Disclaimer
 
-Torii is not affiliated with SubsPlease, ntfy or qBittorrent. It automates a torrent client. You are responsible for what you download and for complying with the laws of your country.
+Torii is not affiliated with SubsPlease, AniList, ntfy or qBittorrent. It automates a torrent client. You are responsible for what you download and for complying with the laws of your country.
 
 ## License
 

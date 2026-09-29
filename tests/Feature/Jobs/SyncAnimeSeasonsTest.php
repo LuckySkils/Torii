@@ -120,7 +120,7 @@ test('an existing entry whose cover URL changed gets its cover fetched again', f
     Http::fake(['graphql.anilist.co' => Http::sequence()
         ->push(fallSeasonResponse())
         ->push(fallSeasonResponse(function (array $response) {
-            $response['data']['Page']['media'][1]['coverImage']['large'] = 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/new.jpg';
+            $response['data']['Page']['media'][1]['coverImage']['extraLarge'] = 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/new.jpg';
 
             return $response;
         }))]);
@@ -138,7 +138,7 @@ test('an existing entry whose cover URL changed gets its cover fetched again', f
     Queue::assertPushed(FetchAnimeCover::class, fn (FetchAnimeCover $job) => $job->animeId === $changed->id);
 });
 
-test('an old season sync stores entries but fetches no covers for them', function () {
+test('an old season sync fetches covers too: every anime gets one', function () {
     Http::fake(['graphql.anilist.co' => Http::response(fallSeasonResponse(function (array $response) {
         foreach ($response['data']['Page']['media'] as &$media) {
             $media['seasonYear'] = 2019;
@@ -150,7 +150,7 @@ test('an old season sync stores entries but fetches no covers for them', functio
     runSeasonSync(new SyncAnimeSeasons([['season' => 'FALL', 'year' => 2019]]));
 
     expect(Anime::count())->toBe(5);
-    Queue::assertNotPushed(FetchAnimeCover::class);
+    Queue::assertPushed(FetchAnimeCover::class, 5);
 });
 
 test('--all-linked refreshes linked anime outside the synced seasons in one batched request', function () {

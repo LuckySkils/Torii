@@ -40,7 +40,8 @@ test('parses a full entry from a real season page', function () {
         ->and($anime->season)->toBe('FALL')
         ->and($anime->seasonYear)->toBe(2026)
         ->and($anime->startDate)->toBe('2026-10-02')
-        ->and($anime->coverUrl)->toBe('https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx195516-MJpUZlOberqH.jpg')
+        // extraLarge, AniList's largest; its URL path says "large".
+        ->and($anime->coverUrl)->toBe('https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx195516-MJpUZlOberqH.jpg')
         ->and($anime->bannerUrl)->toBeNull()
         ->and($anime->siteUrl)->toBe('https://anilist.co/anime/195516')
         ->and($anime->isAdult)->toBeFalse()

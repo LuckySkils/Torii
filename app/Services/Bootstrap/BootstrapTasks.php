@@ -51,8 +51,21 @@ class BootstrapTasks
                 'anime.initial-covers',
                 'Queue anime covers',
                 ['anime.initial-sync'],
-                // Spaced 2s apart by anime:fetch-images itself.
+                // Spaced 2s apart on the covers channel.
                 fn () => [new RunArtisanCommand('anime:fetch-images', ['--missing' => true])],
+            ),
+            new BootstrapTaskDefinition(
+                'anime.full-covers',
+                'Complete and upgrade anime covers',
+                // For installs that ran anime.initial-covers when covers were limited to
+                // current/next season at the smaller size: every missing cover, then every
+                // old-size one. On a fresh install it finds them already queued (the unique
+                // lock turns duplicates away) and adds nothing.
+                ['anime.initial-covers'],
+                fn () => [
+                    new RunArtisanCommand('anime:fetch-images', ['--missing' => true]),
+                    new RunArtisanCommand('anime:fetch-images', ['--upgrade' => true]),
+                ],
             ),
         ];
     }

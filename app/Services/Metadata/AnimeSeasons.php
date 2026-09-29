@@ -5,12 +5,9 @@ declare(strict_types=1);
 namespace App\Services\Metadata;
 
 use App\Enums\AnimeSeason;
-use App\Models\Anime;
-use Illuminate\Database\Eloquent\Builder;
 
 /**
- * The previous, current and next season, as of now, and the "worth keeping a
- * cover for" set of anime: in the current or next season, or linked to a show.
+ * The previous, current and next season, as of now.
  */
 final class AnimeSeasons
 {
@@ -40,21 +37,5 @@ final class AnimeSeasons
         [$season, $year] = $this->current();
 
         return $season->next($year);
-    }
-
-    /**
-     * @return Builder<Anime>
-     */
-    public function coverEligible(): Builder
-    {
-        [$currentSeason, $currentYear] = $this->current();
-        [$nextSeason, $nextYear] = $this->next();
-
-        return Anime::query()
-            ->whereNotNull('cover_url')
-            ->where(fn (Builder $query) => $query
-                ->where(fn (Builder $q) => $q->where('season', $currentSeason->value)->where('season_year', $currentYear))
-                ->orWhere(fn (Builder $q) => $q->where('season', $nextSeason->value)->where('season_year', $nextYear))
-                ->orWhereHas('links'));
     }
 }

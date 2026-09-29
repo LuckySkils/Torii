@@ -19,7 +19,7 @@ export function AnimeFacts({ format = null, season, seasonYear, status, episodes
         formatLabel(format),
         animeSeasonLabel(season, seasonYear),
         statusLabel(status),
-        episodeCount(episodesAired, episodesTotal),
+        episodeCount(episodesAired, episodesTotal, status),
         durationMinutes ? `${durationMinutes} min` : null,
     ].filter((fact): fact is string => fact !== null);
 

@@ -59,6 +59,7 @@ test('the browse page defaults to the current season and pages 30 at a time', fu
             'format' => [],
             'genresInclude' => [],
             'genresExclude' => [],
+            'adult' => 'hide',
         ])
         ->where('filterOptions.seasons', ['WINTER', 'SPRING', 'SUMMER', 'FALL'])
         ->where('filterOptions.years', [2026])

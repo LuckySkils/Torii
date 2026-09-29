@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\AnimeSeason;
 use App\Http\Resources\AnimeResource;
+use App\Jobs\FetchAnimeCover;
 use App\Models\Anime;
 use App\Models\AnimeAiring;
 use App\Models\AnimeImage;
@@ -26,6 +27,9 @@ class AnimeController extends Controller
      * Multi-select filters: `format[]` (any of them), `genres_include[]` (all of
      * them), `genres_exclude[]` (none of them); each also accepts a comma list.
      * The old single `genre=` still works and counts as an include.
+     * `adult=hide` (default) | `include` | `only` for AniList's isAdult entries.
+     *
+     * Entries on the page without a stored cover get one fetched on demand.
      */
     public function index(Request $request, AnimeSeasons $seasons, AnimeFacets $facets): InertiaResponse
     {
@@ -39,6 +43,7 @@ class AnimeController extends Controller
         $formats = $this->formatsParam($request);
         $include = array_values(array_unique([...$this->listParam($request, 'genres_include'), ...$this->listParam($request, 'genre')]));
         $exclude = $this->listParam($request, 'genres_exclude');
+        $adult = in_array($request->query('adult'), ['include', 'only'], true) ? (string) $request->query('adult') : 'hide';
 
         $season = $season === null ? null : strtoupper($season);
 
@@ -53,11 +58,16 @@ class AnimeController extends Controller
             ->withoutGenres($exclude)
             ->when($linked === 'yes', fn (Builder $q) => $q->whereHas('links'))
             ->when($linked === 'no', fn (Builder $q) => $q->whereDoesntHave('links'))
+            ->when($adult === 'hide', fn (Builder $q) => $q->where('is_adult', false))
+            ->when($adult === 'only', fn (Builder $q) => $q->where('is_adult', true))
             ->orderByRaw('title_romaji ASC NULLS LAST')
             ->orderBy('id');
 
+        $page = $query->paginate(30)->withQueryString();
+        $this->requestMissingCovers($page->getCollection()->all());
+
         return Inertia::render('Anime/Index', [
-            'anime' => AnimeResource::collection($query->paginate(30)->withQueryString()),
+            'anime' => AnimeResource::collection($page),
             'filters' => [
                 'q' => $search,
                 'season' => $season,
@@ -67,6 +77,7 @@ class AnimeController extends Controller
                 'format' => $formats,
                 'genresInclude' => $include,
                 'genresExclude' => $exclude,
+                'adult' => $adult,
             ],
             'filterOptions' => [
                 'seasons' => array_map(fn (AnimeSeason $s) => $s->value, AnimeSeason::cases()),
@@ -76,6 +87,21 @@ class AnimeController extends Controller
                 'statuses' => Anime::query()->whereNotNull('status')->distinct()->orderBy('status')->pluck('status')->all(),
             ],
         ]);
+    }
+
+    /**
+     * Queues a cover for each shown entry that has none and hasn't failed before;
+     * repeated views within 10 minutes, or an already-queued fetch, add nothing.
+     *
+     * @param  array<int, Anime>  $anime  with `image` loaded
+     */
+    private function requestMissingCovers(array $anime): void
+    {
+        foreach ($anime as $entry) {
+            if ($entry->image === null) {
+                FetchAnimeCover::requestOnDemand($entry);
+            }
+        }
     }
 
     /**
@@ -89,6 +115,7 @@ class AnimeController extends Controller
     public function show(Anime $anime): InertiaResponse
     {
         $anime->load([...$this->listRelations(), 'externalIds', 'links.show.image' => fn ($q) => $q->select(['id', 'show_id', 'sha256'])]);
+        $this->requestMissingCovers([$anime]);
 
         return Inertia::render('Anime/Show', [
             'anime' => (new AnimeResource($anime))->detail()->resolve(),
