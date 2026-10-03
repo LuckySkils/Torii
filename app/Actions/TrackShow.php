@@ -8,6 +8,7 @@ use App\Enums\RuleState;
 use App\Jobs\QueueReleases;
 use App\Jobs\SyncShowRule;
 use App\Models\Show;
+use App\Services\Downloads\DownloadPlan;
 use App\Services\Downloads\DownloadPlanner;
 
 final class TrackShow
@@ -16,7 +17,11 @@ final class TrackShow
         private readonly DownloadPlanner $planner,
     ) {}
 
-    public function __invoke(Show $show): void
+    /**
+     * @return DownloadPlan what was queued and whether a rule was created, so a
+     *                      caller (the MCP track_show tool) can report it
+     */
+    public function __invoke(Show $show): DownloadPlan
     {
         $plan = $this->planner->plan($show);
 
@@ -35,5 +40,7 @@ final class TrackShow
         if ($plan->createRule) {
             SyncShowRule::dispatch($show, track: true);
         }
+
+        return $plan;
     }
 }

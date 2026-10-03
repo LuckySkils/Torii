@@ -7,6 +7,8 @@ namespace App\Services\Metadata\AniList;
 use App\Contracts\MetadataProvider;
 use App\Services\Metadata\ProviderAiring;
 use App\Services\Metadata\ProviderAnime;
+use App\Services\Metadata\ProviderTagDefinition;
+use App\Services\Metadata\ProviderVocabulary;
 
 final class AniListProvider implements MetadataProvider
 {
@@ -164,6 +166,39 @@ final class AniListProvider implements MetadataProvider
     public function schedule(string $externalId): array
     {
         return $this->schedules([$externalId])[$externalId] ?? [];
+    }
+
+    /**
+     * One request: AniList's genre list and its full tag collection (every tag,
+     * adult ones included, whether or not any anime here has it), with each tag's
+     * category and description.
+     */
+    public function vocabulary(): ProviderVocabulary
+    {
+        $data = $this->client->query('query { GenreCollection MediaTagCollection { name description category isAdult } }');
+
+        $text = fn ($value): ?string => is_string($value) && trim($value) !== '' ? trim($value) : null;
+
+        $genres = array_values(array_unique(array_filter(
+            array_map($text, is_array($data['GenreCollection'] ?? null) ? $data['GenreCollection'] : []),
+        )));
+
+        $tags = [];
+
+        foreach (is_array($data['MediaTagCollection'] ?? null) ? $data['MediaTagCollection'] : [] as $tag) {
+            $name = is_array($tag) ? $text($tag['name'] ?? null) : null;
+
+            if ($name !== null && ! isset($tags[$name])) {
+                $tags[$name] = new ProviderTagDefinition(
+                    name: $name,
+                    category: $text($tag['category'] ?? null),
+                    description: $text($tag['description'] ?? null),
+                    isAdult: ($tag['isAdult'] ?? false) === true,
+                );
+            }
+        }
+
+        return new ProviderVocabulary($genres, array_values($tags));
     }
 
     /**

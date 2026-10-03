@@ -12,6 +12,7 @@ use App\Models\AnimeAiring;
 use App\Models\AnimeImage;
 use App\Services\Metadata\AnimeFacets;
 use App\Services\Metadata\AnimeSeasons;
+use App\Support\HtmlExcerpt;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -171,7 +172,7 @@ class AnimeController extends Controller
                 return null;
             }
 
-            [$description, $truncated] = $this->truncateHtml($anime->description, self::CARD_DESCRIPTION_LENGTH);
+            [$description, $truncated] = HtmlExcerpt::cut($anime->description, self::CARD_DESCRIPTION_LENGTH);
             $show = $anime->primaryLinkedShow();
 
             return [
@@ -201,34 +202,6 @@ class AnimeController extends Controller
         }
 
         return response()->json($card);
-    }
-
-    /**
-     * Cuts HTML to about $length characters without leaving half a tag: back to
-     * before an unclosed `<`, then to the last word break. Elements left open are
-     * closed by the frontend's sanitizer.
-     *
-     * @return array{0: string|null, 1: bool}
-     */
-    private function truncateHtml(?string $html, int $length): array
-    {
-        if ($html === null || mb_strlen($html) <= $length) {
-            return [$html, false];
-        }
-
-        $cut = mb_substr($html, 0, $length);
-
-        $open = mb_strrpos($cut, '<');
-        if ($open !== false && mb_strrpos($cut, '>') < $open) {
-            $cut = mb_substr($cut, 0, $open);
-        }
-
-        $space = mb_strrpos($cut, ' ');
-        if ($space !== false && $space > $length * 0.8) {
-            $cut = mb_substr($cut, 0, $space);
-        }
-
-        return [rtrim($cut), true];
     }
 
     /** Serves the stored cover, exactly like ImageController::show serves posters. */

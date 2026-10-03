@@ -153,5 +153,5 @@ test('bootstrap: a failed task is a problem with its error; pending tasks are on
 
     BootstrapTask::where('key', 'anime.initial-sync')->update(['completed_at' => now(), 'error' => null]);
 
-    expect(healthChecks()['bootstrap'])->toMatchArray(['ok' => true, 'detail' => 'In progress: 5 of 6 tasks done.']);
+    expect(healthChecks()['bootstrap'])->toMatchArray(['ok' => true, 'detail' => 'In progress: 6 of 7 tasks done.']);
 });

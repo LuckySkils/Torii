@@ -38,6 +38,20 @@ return [
         ],
     ],
 
+    // MCP server (§15). Off by default; with MCP_PORT set it gets its own listener.
+    'mcp' => [
+        'enabled' => filter_var(env('MCP_ENABLED', false), FILTER_VALIDATE_BOOL),
+        // Empty: served at POST /mcp on the main port. Set: a second listener on this port serves only /mcp.
+        'port' => ($port = trim((string) env('MCP_PORT', ''))) === '' ? null : (int) $port,
+        // When false, write tools are not registered at all (absent from tools/list).
+        'allow_writes' => filter_var(env('MCP_ALLOW_WRITES', false), FILTER_VALIDATE_BOOL),
+        // When set, every request needs `Authorization: Bearer <token>`.
+        'token' => (string) env('MCP_TOKEN', ''),
+        // Hard cap on any list tool's page size.
+        'max_results' => max(1, (int) env('MCP_MAX_RESULTS', 50)),
+        'rate_limit_per_minute' => 120,
+    ],
+
     'notifications' => [
         'enabled' => env('NTFY_URL', '') !== '' && env('NTFY_TOPIC', 'torii') !== '',
         'ntfy_url' => env('NTFY_URL', ''),

@@ -6,6 +6,7 @@ namespace App\Contracts;
 
 use App\Services\Metadata\ProviderAiring;
 use App\Services\Metadata\ProviderAnime;
+use App\Services\Metadata\ProviderVocabulary;
 
 interface MetadataProvider
 {
@@ -51,4 +52,10 @@ interface MetadataProvider
      * @return array<string, array<int, ProviderAiring>>
      */
     public function schedules(array $externalIds): array;
+
+    /**
+     * Every genre and tag name the provider has, used by catalog anime or not,
+     * so free-text queries can recognise them (suggest_anime).
+     */
+    public function vocabulary(): ProviderVocabulary;
 }

@@ -6,6 +6,7 @@ namespace App\Console\Commands;
 
 use App\Enums\AnimeSeason;
 use App\Jobs\SyncAnimeSeasons;
+use App\Jobs\SyncAnimeVocabulary;
 use App\Services\Metadata\AnimeSeasons;
 use Illuminate\Console\Command;
 
@@ -25,8 +26,10 @@ class AnimeSyncSeason extends Command
         if ($this->option('weekly')) {
             $job = SyncAnimeSeasons::weekly(allLinked: true);
             SyncAnimeSeasons::dispatch($job->seasons, $job->allLinked);
+            // The full genre and tag lists, for suggest_anime's query matching (one request).
+            SyncAnimeVocabulary::dispatch();
 
-            $this->info('Queued anime sync for '.collect($job->seasons)->map(fn (array $s) => "{$s['season']} {$s['year']}")->implode(', ').' plus all linked anime.');
+            $this->info('Queued anime sync for '.collect($job->seasons)->map(fn (array $s) => "{$s['season']} {$s['year']}")->implode(', ').' plus all linked anime, and the genre/tag vocabulary.');
 
             return self::SUCCESS;
         }

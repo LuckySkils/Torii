@@ -10,13 +10,16 @@ use App\Models\AnimePayload;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Writes one ProviderAnime into `anime`, `anime_external_ids` and
- * `anime_payloads`. Idempotent: an entry is found by its provider id, and the
- * payload row is replaced, never duplicated.
+ * Writes one ProviderAnime into `anime`, `anime_external_ids`, `anime_payloads`
+ * and its genres, tags and studios. Idempotent: an entry is found by its provider id, and
+ * the payload row and genre/tag/studio rows are replaced, never duplicated.
  */
 final class AnimeSyncer
 {
-    public function __construct(private readonly AnimeAiringWriter $airings) {}
+    public function __construct(
+        private readonly AnimeAiringWriter $airings,
+        private readonly AnimeTaxonomyWriter $taxonomy,
+    ) {}
 
     public function upsert(ProviderAnime $entry): AnimeSyncResult
     {
@@ -66,6 +69,9 @@ final class AnimeSyncer
                 ['anime_id' => $anime->id, 'provider' => $entry->provider],
                 ['payload' => $entry->raw, 'fetched_at' => now()],
             );
+
+            // This provider just became primary, so its genres, tags and studios are the anime's.
+            $this->taxonomy->replace($anime, $entry->genres, $entry->tags, $entry->studios);
 
             if ($entry->nextAiring !== null) {
                 $this->airings->merge($anime, $entry->provider, [$entry->nextAiring]);

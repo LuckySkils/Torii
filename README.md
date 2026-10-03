@@ -126,6 +126,33 @@ To use the public ntfy.sh instead, don't enable the profile. Set `NTFY_URL=https
 
 Your phone receives notifications only while it can reach the ntfy server. From outside your home, that means a reverse proxy or a VPN.
 
+### MCP server (optional)
+
+Torii can act as an [MCP](https://modelcontextprotocol.io) server, so an LLM client can browse your catalog, schedule and shows, suggest what to watch from your own data, and (if you allow it) track shows and queue downloads. It runs inside the same container and is off by default.
+
+1. In `.env`, set `MCP_ENABLED=true` and a long random `MCP_TOKEN` (e.g. `openssl rand -hex 32`), then `docker compose up -d`.
+2. Add it to your client. Claude Code:
+   ```bash
+   claude mcp add --transport http torii http://192.168.1.10:8080/mcp --header "Authorization: Bearer <MCP_TOKEN>"
+   ```
+   Claude Desktop accepts the same URL and header in its MCP configuration, or can bridge to it with `mcp-remote`.
+
+Tools: `search_anime`, `get_anime`, `list_schedule`, `list_shows`, `get_show`, `tracked_summary`, `suggest_link` and `suggest_anime` are read-only. `track_show`, `untrack_show`, `queue_missing` and `download_release` exist only with `MCP_ALLOW_WRITES=true`; each call is logged.
+
+**Its own port.** By default MCP shares the UI's port at `/mcp`. To separate them, set `MCP_PORT` (e.g. `7099`): the container then starts a second listener on that port that answers only `/mcp`, and `/mcp` disappears from the UI's port. Docker publishes that port only when you opt in with the second compose file, by adding this to `.env`:
+
+```env
+MCP_PORT=7099
+# On Windows, use ; instead of : between the files
+COMPOSE_FILE=docker-compose.yml:docker-compose.mcp.yml
+```
+
+or by running `docker compose -f docker-compose.yml -f docker-compose.mcp.yml up -d`. With `MCP_PORT` empty, no extra port is published. The container refuses to start if `MCP_PORT` equals the main port (`80` inside, `TORII_PORT` outside).
+
+**Exposure.** Treat it like the UI: LAN-only by default. For remote use, put the MCP port behind a reverse proxy with TLS and set `MCP_TOKEN`; that's enough for Claude Code and Claude Desktop. claude.ai's custom connectors currently accept only OAuth, which Torii doesn't implement, so they can't connect. Exposing the endpoint publicly with `MCP_ALLOW_WRITES=true` means an LLM client can start downloads on your machine; leave writes off unless you want that.
+
+The endpoint speaks MCP protocol `2026-07-28` and, for clients that still use the `initialize` handshake, `2025-11-25` and `2025-06-18`. It is rate-limited to 120 requests a minute, and list tools return at most `MCP_MAX_RESULTS` rows.
+
 ## Installation without Docker
 
 Requirements:
@@ -195,6 +222,11 @@ For a permanent setup, run these under systemd or Supervisor. Restart `queue:wor
 | `NOTIFY_DOWNLOADED` | `true` | Notify when an episode finishes downloading |
 | `NOTIFY_REPACKS` | `false` | Also notify for `v2`+ re-releases |
 | `NOTIFY_CLICK_URL` | `APP_URL` | Where tapping a notification opens Torii |
+| `MCP_ENABLED` | `false` | Serve the MCP endpoint. Off: `/mcp` doesn't exist. |
+| `MCP_PORT` | *(empty)* | Empty: MCP at `/mcp` on the UI's port. Set: a separate listener on this port that serves only `/mcp`. Docker publishes it only with `docker-compose.mcp.yml`. Must differ from the main port. |
+| `MCP_TOKEN` | *(empty)* | Bearer token; when set, every MCP request needs `Authorization: Bearer <token>` |
+| `MCP_ALLOW_WRITES` | `false` | Also offer the tools that track/untrack shows and queue downloads. Off: they aren't listed at all. |
+| `MCP_MAX_RESULTS` | `50` | Hard cap on rows any MCP tool returns |
 
 In qBittorrent, RSS processing and RSS auto-downloading must be enabled. `php artisan qbit:setup --fix-prefs` turns them on for you.
 
@@ -224,7 +256,7 @@ With Docker, prefix these with `docker compose exec torii php artisan`. Most of 
 - It relies on SubsPlease's RSS feed and its undocumented site API. If SubsPlease changes either, parts of Torii may break until they're updated.
 - Metadata depends on AniList, polled under a conservative rate limit. Torii works normally with the metadata layer empty or AniList unreachable.
 - Matching is name-based. Split-cour titles (e.g. "4th Season Part 1 & 2") and shows numbered on from an earlier season usually need linking by hand.
-- It is single-user with no auth, and meant for a home network.
+- It is single-user with no auth, and meant for a home network. The optional MCP endpoint has a bearer token, but no OAuth.
 
 ## Roadmap
 

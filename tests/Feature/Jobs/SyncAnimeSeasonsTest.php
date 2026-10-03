@@ -15,6 +15,7 @@ use App\Services\Metadata\AniList\AniListException;
 use App\Services\Metadata\AniList\AniListMediaParser;
 use App\Services\Metadata\AnimeSyncer;
 use App\Services\Metadata\ProviderAnime;
+use App\Services\Metadata\ProviderVocabulary;
 use Carbon\Carbon;
 use Illuminate\Bus\UniqueLock;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -258,6 +259,11 @@ test('the provider binding is used, so a stub provider needs no HTTP at all', fu
         public function schedules(array $externalIds): array
         {
             return [];
+        }
+
+        public function vocabulary(): ProviderVocabulary
+        {
+            return new ProviderVocabulary([], []);
         }
     });
 

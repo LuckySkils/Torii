@@ -6,6 +6,7 @@ use App\Jobs\CompleteBootstrapTask;
 use App\Jobs\RunArtisanCommand;
 use App\Jobs\SyncAnimeAirings;
 use App\Jobs\SyncAnimeSeasons;
+use App\Jobs\SyncAnimeVocabulary;
 use App\Models\BootstrapTask;
 use App\Services\Bootstrap\BootstrapRunner;
 use App\Services\Bootstrap\BootstrapTaskDefinition;
@@ -192,6 +193,7 @@ test('the real tasks, in order, with their dependencies', function () {
         ['anime.initial-airings', ['anime.initial-sync']],
         ['anime.initial-covers', ['anime.initial-sync']],
         ['anime.full-covers', ['anime.initial-covers']],
+        ['anime.vocabulary', []],
     ]);
 });
 
@@ -204,10 +206,12 @@ test('on a fresh database the real bootstrap only queues jobs: the roots now, de
     Queue::assertPushedWithChain(SyncAnimeSeasons::class, [CompleteBootstrapTask::class], fn (SyncAnimeSeasons $job) => $job->seasons === [
         ['season' => 'SPRING', 'year' => 2026], ['season' => 'SUMMER', 'year' => 2026], ['season' => 'FALL', 'year' => 2026],
     ] && $job->allLinked);
+    Queue::assertPushedWithChain(SyncAnimeVocabulary::class, [CompleteBootstrapTask::class]);
     Queue::assertNotPushed(SyncAnimeAirings::class);
     Queue::assertNotPushed(RunArtisanCommand::class, fn (RunArtisanCommand $job) => $job->command !== 'feed:poll');
 
     expect(taskState('feed.initial-poll'))->toBe('running')
+        ->and(taskState('anime.vocabulary'))->toBe('running')
         ->and(taskState('anime.initial-sync'))->toBe('running')
         ->and(taskState('anime.initial-airings'))->toBe('pending');
 });
@@ -286,10 +290,11 @@ test('the schedule runs the weekly season sync and the daily airing sync as comm
         ->and($output)->toContain('anime:sync-airings');
 });
 
-test('anime:sync-season --weekly queues the previous, current and next season plus linked anime', function () {
+test('anime:sync-season --weekly queues the previous, current and next season plus linked anime, and the vocabulary', function () {
     Queue::fake();
 
     $this->artisan('anime:sync-season --weekly')->assertSuccessful();
 
     Queue::assertPushed(SyncAnimeSeasons::class, fn (SyncAnimeSeasons $job) => count($job->seasons) === 3 && $job->allLinked);
+    Queue::assertPushed(SyncAnimeVocabulary::class);
 });

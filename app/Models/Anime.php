@@ -7,6 +7,7 @@ namespace App\Models;
 use App\Services\Metadata\Matching\TitleNormalizer;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
@@ -69,6 +70,27 @@ class Anime extends Model
     public function payloads(): HasMany
     {
         return $this->hasMany(AnimePayload::class);
+    }
+
+    /**
+     * The same names as the `genres` column, as rows (written together by the sync).
+     */
+    public function genreRows(): BelongsToMany
+    {
+        return $this->belongsToMany(Genre::class, 'anime_genre');
+    }
+
+    /**
+     * With the pivot's `rank` (0–100) and `is_spoiler`.
+     */
+    public function tags(): BelongsToMany
+    {
+        return $this->belongsToMany(Tag::class, 'anime_tag')->withPivot(['rank', 'is_spoiler']);
+    }
+
+    public function studios(): BelongsToMany
+    {
+        return $this->belongsToMany(Studio::class, 'anime_studio');
     }
 
     public function airings(): HasMany

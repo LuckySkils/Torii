@@ -10,6 +10,9 @@ use App\Services\Metadata\MetadataProviders;
 use App\Services\Notifications\NtfyNotifier;
 use App\Services\Notifications\NullNotifier;
 use App\Services\QBittorrent\RulesDriver;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -47,6 +50,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // MCP endpoint (§15): enough for an agent, not enough for a loop to hammer the database.
+        RateLimiter::for('mcp', fn (Request $request) => Limit::perMinute((int) config('subtracker.mcp.rate_limit_per_minute'))
+            ->by($request->ip()));
     }
 }

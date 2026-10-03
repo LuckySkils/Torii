@@ -7,6 +7,7 @@ namespace App\Services\Bootstrap;
 use App\Jobs\RunArtisanCommand;
 use App\Jobs\SyncAnimeAirings;
 use App\Jobs\SyncAnimeSeasons;
+use App\Jobs\SyncAnimeVocabulary;
 
 /**
  * The one-time data tasks, in order. Add new ones at the end with a new key;
@@ -66,6 +67,13 @@ class BootstrapTasks
                     new RunArtisanCommand('anime:fetch-images', ['--missing' => true]),
                     new RunArtisanCommand('anime:fetch-images', ['--upgrade' => true]),
                 ],
+            ),
+            new BootstrapTaskDefinition(
+                'anime.vocabulary',
+                'Load the genre and tag vocabulary',
+                // So existing installs needn't wait for the weekly sync; one request.
+                [],
+                fn () => [new SyncAnimeVocabulary],
             ),
         ];
     }

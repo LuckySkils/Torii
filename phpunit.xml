@@ -22,13 +22,27 @@
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="CACHE_STORE" value="array"/>
-        <env name="DB_CONNECTION" value="pgsql"/>
-        <env name="DB_HOST" value="192.168.1.95"/>
-        <env name="DB_PORT" value="5432"/>
-        <env name="DB_DATABASE" value="torii_testing"/>
-        <env name="DB_USERNAME" value="postgres"/>
-        <env name="DB_PASSWORD" value="3980"/>
+        <!-- Forced, so no environment (e.g. a container's DB_*) can point the suite at a real database. -->
+        <env name="DB_CONNECTION" value="pgsql" force="true"/>
+        <env name="DB_HOST" value="192.168.1.95" force="true"/>
+        <env name="DB_PORT" value="5432" force="true"/>
+        <env name="DB_DATABASE" value="torii_testing" force="true"/>
+        <env name="DB_USERNAME" value="postgres" force="true"/>
+        <env name="DB_PASSWORD" value="3980" force="true"/>
+        <!-- A cached config (bootstrap/cache/config.php, built by the container entrypoint) would
+             override every env value above, so the suite reads a cache path that never exists. -->
+        <env name="APP_CONFIG_CACHE" value="bootstrap/cache/config.testing-never-cached.php" force="true"/>
+        <!-- Laravel reads $_SERVER before $_ENV, and $_SERVER holds the real process environment,
+             which <env force> doesn't touch. <server> always overwrites it. -->
+        <server name="DB_CONNECTION" value="pgsql"/>
+        <server name="DB_HOST" value="192.168.1.95"/>
+        <server name="DB_PORT" value="5432"/>
+        <server name="DB_DATABASE" value="torii_testing"/>
+        <server name="DB_USERNAME" value="postgres"/>
+        <server name="DB_PASSWORD" value="3980"/>
+        <server name="APP_CONFIG_CACHE" value="bootstrap/cache/config.testing-never-cached.php"/>
         <env name="MAIL_MAILER" value="array"/>
+        <env name="MCP_ENABLED" value="true"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>

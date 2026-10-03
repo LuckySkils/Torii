@@ -1,0 +1,8 @@
+# Opt-in: publishes MCP_PORT for the separate MCP listener. Without this file no
+# extra port is published. Enable it in .env with
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.mcp.yml
+# (on Windows use ; as the separator) or pass both files with -f.
+services:
+  torii:
+    ports:
+      - "${MCP_PORT:?Set MCP_PORT in .env to use docker-compose.mcp.yml}:${MCP_PORT}"

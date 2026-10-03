@@ -4,12 +4,11 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Actions\QueueMissingReleases;
 use App\Actions\TrackShow;
 use App\Actions\UntrackShow;
 use App\Enums\RuleState;
-use App\Jobs\QueueReleases;
 use App\Models\Show;
-use App\Services\Downloads\DownloadPlanner;
 use App\Services\QBittorrent\RulesDriver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -78,16 +77,12 @@ class ShowTrackingController extends Controller
         return response()->json($driver->matchingArticles($show));
     }
 
-    public function queueMissing(Show $show, DownloadPlanner $planner): RedirectResponse
+    public function queueMissing(Show $show, QueueMissingReleases $queueMissing): RedirectResponse
     {
-        $releaseIds = $planner->downloadableSet($show)->pluck('id')->all();
+        $releaseIds = $queueMissing($show);
 
-        if ($releaseIds === []) {
-            return back()->with('success', 'Nothing to queue.');
-        }
-
-        QueueReleases::dispatch($releaseIds);
-
-        return back()->with('success', 'Queued '.count($releaseIds).' releases.');
+        return $releaseIds === []
+            ? back()->with('success', 'Nothing to queue.')
+            : back()->with('success', 'Queued '.count($releaseIds).' releases.');
     }
 }

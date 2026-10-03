@@ -6,6 +6,7 @@ namespace App\Services\Metadata\AniList;
 
 use App\Services\Metadata\ProviderAiring;
 use App\Services\Metadata\ProviderAnime;
+use App\Services\Metadata\ProviderTag;
 use Carbon\CarbonImmutable;
 
 /**
@@ -51,7 +52,49 @@ final class AniListMediaParser
             isAdult: (bool) ($media['isAdult'] ?? false),
             nextAiring: $this->airing($media['nextAiringEpisode'] ?? null),
             raw: $media,
+            tags: $this->tags($media['tags'] ?? null),
+            studios: $this->studios($media['studios']['nodes'] ?? null),
         );
+    }
+
+    /**
+     * `tags { name rank isMediaSpoiler }`: named tags, a missing rank as 0, spoiler
+     * only when flagged true; a repeated name keeps its highest rank. The tags
+     * migration's backfill reads stored payloads the same way.
+     *
+     * @return array<int, ProviderTag>
+     */
+    private function tags(mixed $nodes): array
+    {
+        $tags = [];
+
+        foreach (is_array($nodes) ? $nodes : [] as $node) {
+            $name = is_array($node) ? $this->string($node['name'] ?? null) : null;
+
+            if ($name === null) {
+                continue;
+            }
+
+            $rank = is_int($node['rank'] ?? null) || is_float($node['rank'] ?? null) ? (int) $node['rank'] : 0;
+
+            if (! isset($tags[$name]) || $rank > $tags[$name]->rank) {
+                $tags[$name] = new ProviderTag($name, $rank, ($node['isMediaSpoiler'] ?? false) === true);
+            }
+        }
+
+        return array_values($tags);
+    }
+
+    /**
+     * `studios(isMain: true) { nodes { id name } }`: the names, unique.
+     *
+     * @return array<int, string>
+     */
+    private function studios(mixed $nodes): array
+    {
+        $names = array_map(fn ($node) => is_array($node) ? $this->string($node['name'] ?? null) : null, is_array($nodes) ? $nodes : []);
+
+        return array_values(array_unique(array_filter($names, fn (?string $name) => $name !== null)));
     }
 
     /**

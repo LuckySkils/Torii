@@ -62,6 +62,24 @@ final class ShowAnimeLinker
     }
 
     /**
+     * What matching would decide for one show right now, manual link or not.
+     * Read-only: nothing is linked, suggested or rejected (the MCP suggest_link tool).
+     */
+    public function decisionFor(Show $show): MatchDecision
+    {
+        $index = $this->matcher->index(
+            Anime::query()->get(['id', 'title_romaji', 'title_english', 'title_native', 'synonyms', 'season', 'season_year', 'episodes_total']),
+        );
+
+        return $this->matcher->decide(
+            $show,
+            $index,
+            ShowAnimeRejection::where('show_id', $show->id)->pluck('anime_id')->all(),
+            Release::highestEpisodes([$show->id])[$show->id] ?? null,
+        );
+    }
+
+    /**
      * Writes one decision. A `link` decision creates or updates the auto link; for
      * an unlinked show an `ambiguous` or `held` one replaces its suggestions (with
      * the reason), anything else clears them. An existing auto link is kept rather than removed on a weaker

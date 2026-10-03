@@ -72,7 +72,7 @@ ENV APP_NAME=Torii \
     NTFY_TOKEN="" \
     NOTIFY_NEW_EPISODE=true \
     NOTIFY_DOWNLOADED=true \
-    NOTIFY_REPACKS=false
+    NOTIFY_REPACKS=false     TORII_PORT=8080     MCP_ENABLED=false     MCP_PORT=""     MCP_ALLOW_WRITES=false     MCP_TOKEN=""     MCP_MAX_RESULTS=50
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 COPY composer.json composer.lock ./
@@ -89,7 +89,9 @@ RUN composer dump-autoload --no-dev --optimize --classmap-authoritative \
 
 COPY docker/supervisord.conf /etc/supervisor/torii.conf
 COPY docker/entrypoint.sh /usr/local/bin/torii-entrypoint
-RUN chmod +x /usr/local/bin/torii-entrypoint
+COPY docker/mcp-listener.sh /usr/local/bin/torii-mcp-listener
+COPY docker/mcp.Caddyfile /etc/frankenphp/mcp.Caddyfile
+RUN chmod +x /usr/local/bin/torii-entrypoint /usr/local/bin/torii-mcp-listener
 
 VOLUME /data
 EXPOSE 80

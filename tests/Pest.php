@@ -3,6 +3,7 @@
 use App\Models\Anime;
 use App\Models\Show;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 /*
@@ -62,6 +63,22 @@ function anilistFixture(string $name): array
 }
 
 /**
+ * One media entry from a real AniList season page in tests/Fixtures/anilist/.
+ *
+ * @return array<string, mixed>
+ */
+function anilistMedia(string $fixture, int $id): array
+{
+    foreach (anilistFixture($fixture)['data']['Page']['media'] as $media) {
+        if ($media['id'] === $id) {
+            return $media;
+        }
+    }
+
+    throw new RuntimeException("No media {$id} in {$fixture}.");
+}
+
+/**
  * A stored anime with its AniList id, for metadata tests.
  *
  * @param  array<string, mixed>  $attributes
@@ -92,4 +109,66 @@ function metadataShow(string $name, array $attributes = []): Show
         'last_seen_at' => now(),
         ...$attributes,
     ]);
+}
+
+/**
+ * One JSON-RPC request to the real /mcp route. Legacy-era (no _meta) unless
+ * $modern, which adds the 2026-07-28 _meta and the matching headers.
+ *
+ * @param  array<string, mixed>  $params
+ * @param  array<string, string>  $headers
+ */
+function mcpRequest(string $method, array $params = [], array $headers = [], bool $modern = false): TestResponse
+{
+    if ($modern) {
+        $params['_meta'] = [
+            'io.modelcontextprotocol/protocolVersion' => '2026-07-28',
+            'io.modelcontextprotocol/clientCapabilities' => new stdClass,
+        ];
+        $headers = ['MCP-Protocol-Version' => '2026-07-28', 'Mcp-Method' => $method, ...$headers];
+
+        if (isset($params['name'])) {
+            $headers['Mcp-Name'] ??= $params['name'];
+        }
+    }
+
+    return test()->postJson('/mcp', [
+        'jsonrpc' => '2.0',
+        'id' => 1,
+        'method' => $method,
+        'params' => $params === [] ? new stdClass : $params,
+    ], ['Accept' => 'application/json, text/event-stream', ...$headers]);
+}
+
+/**
+ * Calls a tool over /mcp and returns its decoded JSON output; fails on a tool error.
+ *
+ * @param  array<string, mixed>  $arguments
+ * @return array<string, mixed>
+ */
+function mcpTool(string $name, array $arguments = []): array
+{
+    $result = mcpRequest('tools/call', ['name' => $name, 'arguments' => $arguments === [] ? new stdClass : $arguments])
+        ->assertOk()
+        ->json('result');
+
+    expect($result['isError'])->toBeFalse("{$name} returned an error: ".($result['content'][0]['text'] ?? ''));
+
+    return json_decode($result['content'][0]['text'], true, flags: JSON_THROW_ON_ERROR);
+}
+
+/**
+ * Calls a tool over /mcp expecting a tool error; returns its message.
+ *
+ * @param  array<string, mixed>  $arguments
+ */
+function mcpToolError(string $name, array $arguments = []): string
+{
+    $result = mcpRequest('tools/call', ['name' => $name, 'arguments' => $arguments === [] ? new stdClass : $arguments])
+        ->assertOk()
+        ->json('result');
+
+    expect($result['isError'])->toBeTrue();
+
+    return $result['content'][0]['text'];
 }

@@ -1,0 +1,18 @@
+# The MCP listener (agents/CLAUDE.md §15): the same app on MCP_PORT, started by
+# docker/mcp-listener.sh. No file server: every request, assets included, goes
+# through Laravel, where SeparateMcpListener lets only /mcp through on this port.
+{
+	frankenphp
+	admin off
+	auto_https off
+}
+
+:{$MCP_PORT} {
+	root * /app/public
+	route {
+		rewrite * /index.php
+		php {
+			env TORII_LISTENER mcp
+		}
+	}
+}

@@ -4,20 +4,6 @@ declare(strict_types=1);
 
 use App\Services\Metadata\AniList\AniListMediaParser;
 
-/**
- * @return array<string, mixed>
- */
-function anilistMedia(string $fixture, int $id): array
-{
-    foreach (anilistFixture($fixture)['data']['Page']['media'] as $media) {
-        if ($media['id'] === $id) {
-            return $media;
-        }
-    }
-
-    throw new RuntimeException("No media {$id} in {$fixture}.");
-}
-
 test('parses a full entry from a real season page', function () {
     $media = anilistMedia('season_fall_2026_page1', 195516);
 

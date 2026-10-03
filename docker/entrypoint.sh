@@ -13,6 +13,17 @@ if [ -z "$APP_KEY" ]; then
   export APP_KEY
 fi
 
+# 1b. MCP_PORT must not be the main port: 80 inside the container, TORII_PORT on the host.
+if [ -n "$MCP_PORT" ]; then
+  case "$MCP_PORT" in
+    *[!0-9]*) echo "[torii] MCP_PORT must be a port number, got \"$MCP_PORT\"." >&2; exit 1 ;;
+  esac
+  if [ "$MCP_PORT" = "80" ] || [ "$MCP_PORT" = "${TORII_PORT:-8080}" ]; then
+    echo "[torii] MCP_PORT ($MCP_PORT) is the main port (80 in the container, TORII_PORT=${TORII_PORT:-8080} on the host). Pick another port, or leave MCP_PORT empty to serve MCP at /mcp on the main port." >&2
+    exit 1
+  fi
+fi
+
 # 2. Cache config with the final environment (incl. APP_KEY), plus routes/views/events.
 php artisan config:cache > /dev/null
 php artisan route:cache  > /dev/null

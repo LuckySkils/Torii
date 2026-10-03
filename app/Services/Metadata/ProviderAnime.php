@@ -15,6 +15,8 @@ final readonly class ProviderAnime
      * @param  array<int, string>  $synonyms
      * @param  array<int, string>  $genres
      * @param  array<string, mixed>  $raw
+     * @param  array<int, ProviderTag>  $tags  unique by name
+     * @param  array<int, string>  $studios  main studios, unique
      */
     public function __construct(
         public string $provider,
@@ -40,5 +42,7 @@ final readonly class ProviderAnime
         public bool $isAdult,
         public ?ProviderAiring $nextAiring,
         public array $raw,
+        public array $tags = [],
+        public array $studios = [],
     ) {}
 }

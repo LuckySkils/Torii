@@ -23,6 +23,14 @@ services:
       NTFY_TOPIC: ${NTFY_TOPIC:-torii}
       NTFY_TOKEN: ${NTFY_TOKEN:-}
       NOTIFY_CLICK_URL: ${NOTIFY_CLICK_URL:-}
+      # Lets the container refuse an MCP_PORT equal to the UI's published port
+      TORII_PORT: ${TORII_PORT:-8080}
+      # MCP server (off by default). MCP_PORT only gets published with docker-compose.mcp.yml (see README)
+      MCP_ENABLED: ${MCP_ENABLED:-false}
+      MCP_PORT: ${MCP_PORT:-}
+      MCP_ALLOW_WRITES: ${MCP_ALLOW_WRITES:-false}
+      MCP_TOKEN: ${MCP_TOKEN:-}
+      MCP_MAX_RESULTS: ${MCP_MAX_RESULTS:-50}
     volumes:
       - ${TORII_DATA_DIR:-./data}/app:/data
     depends_on:

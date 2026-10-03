@@ -60,9 +60,10 @@ class Release extends Model
      * and the schedule's numbering check both read this.
      *
      * @param  array<int, int>  $showIds
+     * @param  bool  $downloadedOnly  only releases qBittorrent has finished (the highest downloaded episode)
      * @return array<int, float>
      */
-    public static function highestEpisodes(array $showIds): array
+    public static function highestEpisodes(array $showIds, bool $downloadedOnly = false): array
     {
         if ($showIds === []) {
             return [];
@@ -70,6 +71,7 @@ class Release extends Model
 
         return self::query()
             ->whereIn('show_id', $showIds)
+            ->when($downloadedOnly, fn ($query) => $query->whereNotNull('downloaded_at'))
             ->groupBy('show_id')
             ->selectRaw("show_id, max(greatest(
                 case when not is_batch and episode ~ '^[0-9]+([.][0-9]+)?$' then episode::numeric end,
