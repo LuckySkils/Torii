@@ -7,13 +7,16 @@ namespace App\Services\Reconciler;
 use App\Enums\DeliveryState;
 use App\Enums\FixAttempted;
 use App\Enums\NotificationKind;
+use App\Enums\ReconcilerEventType;
 use App\Jobs\Reconciler\CheckDeliveryInJellyfin;
 use App\Jobs\Reconciler\CheckSeriesEpisodes;
 use App\Jobs\Reconciler\FinishLibraryRefresh;
 use App\Jobs\SendNotification;
 use App\Models\Delivery;
 use App\Models\NotificationLog;
+use App\Models\ReconcilerEvent;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -57,16 +60,24 @@ final class DeliveryReconciler
 
     /**
      * A file Torii downloaded, matched by Shoko: remember its Shoko file, AniDB
-     * anime and (for an existing show) Shoko series. Unknown files are ignored.
+     * anime and (for an existing show) Shoko series. Unknown files are ignored;
+     * if Torii notices the download later, the delivery replays this event.
      *
      * @param  array<string, mixed>  $payload
+     * @param  int|null  $eventId  the recorded event, so it's applied once per delivery
+     * @param  Delivery|null  $only  replaying: apply to this delivery alone
      */
-    public function fileMatched(array $payload): void
+    public function fileMatched(array $payload, ?int $eventId = null, ?Delivery $only = null): void
     {
         $filename = ShokoEvents::filename($payload);
-        $delivery = $filename === null ? null : Delivery::where('filename', $filename)->first();
 
-        if ($delivery === null) {
+        if ($filename === null || ($only !== null && $only->filename !== $filename)) {
+            return;
+        }
+
+        $delivery = $only ?? Delivery::where('filename', $filename)->first();
+
+        if ($delivery === null || ! $this->claim($delivery, $eventId)) {
             return;
         }
 
@@ -94,20 +105,25 @@ final class DeliveryReconciler
      * Either order works: each side remembers the other's arrival.
      *
      * @param  array<string, mixed>  $payload
+     * @param  int|null  $eventId  the recorded event, so it's applied once per delivery
+     * @param  Delivery|null  $only  replaying: apply to this delivery alone
      */
-    public function seriesAdded(array $payload): void
+    public function seriesAdded(array $payload, ?int $eventId = null, ?Delivery $only = null): void
     {
         $shokoIds = array_values(array_map('intval', array_filter((array) ($payload['ShokoSeriesIDs'] ?? []), 'is_numeric')));
         $seriesId = is_numeric($payload['SeriesID'] ?? null) ? (int) $payload['SeriesID'] : null;
+        $scope = fn ($query) => $only === null ? $query : $query->whereKey($only->id);
 
         if (($payload['Source'] ?? null) === 'AniDB') {
             if ($seriesId !== null && $shokoIds !== []) {
-                Delivery::where('anidb_anime_id', $seriesId)->whereNull('shoko_series_id')->update(['shoko_series_id' => $shokoIds[0]]);
+                $scope(Delivery::where('anidb_anime_id', $seriesId)->whereNull('shoko_series_id'))->get()
+                    ->filter(fn (Delivery $delivery) => $this->claim($delivery, $eventId))
+                    ->each(fn (Delivery $delivery) => $delivery->update(['shoko_series_id' => $shokoIds[0]]));
             }
 
             foreach ($shokoIds as $shokoId) {
                 if (Cache::has(self::SERIES_ADDED.$shokoId)) {
-                    $this->startCheckAForSeries($shokoId);
+                    $this->startCheckAForSeries($shokoId, null, $only);
                 }
             }
 
@@ -117,8 +133,70 @@ final class DeliveryReconciler
         // Shoko's own series (the newer naming has no Source field: treated the same).
         foreach ($shokoIds ?: array_filter([$seriesId]) as $shokoId) {
             Cache::put(self::SERIES_ADDED.$shokoId, true, now()->addDay());
-            $this->startCheckAForSeries($shokoId);
+            $this->startCheckAForSeries($shokoId, $eventId, $only);
         }
+    }
+
+    /**
+     * For a delivery created after Shoko already reported its file (Torii notices
+     * completed downloads by polling, up to a minute late): apply the stored
+     * events about it, in their original order, as if they had arrived after it.
+     * Its file.matched (by file name), and the series.added events for the series
+     * that names, through the AniDB anime id as in normal processing. Events
+     * already applied to it are skipped.
+     *
+     * @return int how many events were applied
+     */
+    public function replayStoredEvents(Delivery $delivery): int
+    {
+        $like = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $delivery->filename);
+        $matched = ReconcilerEvent::query()
+            ->where('type', ReconcilerEventType::FileMatched)
+            ->whereRaw("payload->>'RelativePath' LIKE ?", [$like])
+            ->get()
+            ->filter(fn (ReconcilerEvent $event) => ShokoEvents::filename($event->payload) === $delivery->filename);
+
+        $anidbIds = $matched->map(fn (ReconcilerEvent $event) => ShokoEvents::firstReference($event->payload, 'AnidbAnimeID'))->filter()->unique()->values();
+        $fromAnidb = $anidbIds->isEmpty() ? collect() : ReconcilerEvent::query()
+            ->where('type', ReconcilerEventType::SeriesAdded)
+            ->whereRaw("payload->>'Source' = 'AniDB'")
+            ->whereIn(DB::raw("payload->>'SeriesID'"), $anidbIds->map(fn (int $id) => (string) $id)->all())
+            ->get();
+
+        $shokoIds = $fromAnidb->flatMap(fn (ReconcilerEvent $event) => (array) ($event->payload['ShokoSeriesIDs'] ?? []))
+            ->merge($matched->map(fn (ReconcilerEvent $event) => ShokoEvents::firstReference($event->payload, 'SeriesID')))
+            ->filter(fn ($id) => is_numeric($id))->map(fn ($id) => (int) $id)->unique()->values();
+        $fromShoko = $shokoIds->isEmpty() ? collect() : ReconcilerEvent::query()
+            ->where('type', ReconcilerEventType::SeriesAdded)
+            ->where(fn ($query) => $query->whereRaw("payload->>'Source' IS NULL")->orWhereRaw("payload->>'Source' <> 'AniDB'"))
+            ->where(function ($query) use ($shokoIds) {
+                foreach ($shokoIds as $id) {
+                    $query->orWhereRaw("payload->'ShokoSeriesIDs' @> CAST(? AS jsonb)", ["[{$id}]"])
+                        ->orWhereRaw("payload->>'SeriesID' = ?", [(string) $id]);
+                }
+            })
+            ->get();
+
+        $events = $matched->concat($fromAnidb)->concat($fromShoko)->unique('id')
+            ->sortBy([['received_at', 'asc'], ['id', 'asc']])
+            ->reject(fn (ReconcilerEvent $event) => DB::table('delivery_events')->where('delivery_id', $delivery->id)->where('reconciler_event_id', $event->id)->exists())
+            ->values();
+
+        foreach ($events as $event) {
+            $delivery->refresh();
+
+            match ($event->type) {
+                ReconcilerEventType::FileMatched => $this->fileMatched($event->payload, $event->id, $delivery),
+                ReconcilerEventType::SeriesAdded => $this->seriesAdded($event->payload, $event->id, $delivery),
+                default => null,
+            };
+        }
+
+        if ($events->isNotEmpty()) {
+            logger()->info('Reconciler: replayed stored events for a delivery', ['delivery' => $delivery->id, 'events' => $events->pluck('id')->all()]);
+        }
+
+        return $events->count();
     }
 
     /**
@@ -370,8 +448,13 @@ final class DeliveryReconciler
             ->whereIn('kind', [NotificationKind::DeliveryFixed, NotificationKind::DeliveryGaveUp])
             ->delete();
 
-        // A new show's series exists by now, so its chain starts at check A.
-        if ($state === DeliveryState::AwaitingSeries) {
+        // From the start: the stored events (14 days) are applied again.
+        DB::table('delivery_events')->where('delivery_id', $delivery->id)->delete();
+        $this->replayStoredEvents($delivery->refresh());
+
+        // A new show's series exists by now, so its chain starts at check A (a
+        // replayed series.added may already have queued it: the job is unique).
+        if ($delivery->refresh()->state === DeliveryState::AwaitingSeries) {
             $this->startCheckA($delivery, self::INITIAL);
         }
     }
@@ -410,10 +493,30 @@ final class DeliveryReconciler
         }
     }
 
-    private function startCheckAForSeries(int $shokoSeriesId): void
+    private function startCheckAForSeries(int $shokoSeriesId, ?int $eventId = null, ?Delivery $only = null): void
     {
-        Delivery::where('state', DeliveryState::AwaitingSeries)->where('shoko_series_id', $shokoSeriesId)->get()
+        Delivery::where('state', DeliveryState::AwaitingSeries)->where('shoko_series_id', $shokoSeriesId)
+            ->when($only !== null, fn ($query) => $query->whereKey($only->id))
+            ->get()
+            ->filter(fn (Delivery $delivery) => $this->claim($delivery, $eventId))
             ->each(fn (Delivery $delivery) => $this->startCheckA($delivery, self::INITIAL));
+    }
+
+    /**
+     * Marks the event applied to the delivery; false when it already was (live
+     * and replay both go through here). No event id (a direct call): always true.
+     */
+    private function claim(Delivery $delivery, ?int $eventId): bool
+    {
+        if ($eventId === null) {
+            return true;
+        }
+
+        return DB::table('delivery_events')->insertOrIgnore([
+            'delivery_id' => $delivery->id,
+            'reconciler_event_id' => $eventId,
+            'applied_at' => now(),
+        ]) === 1;
     }
 
     /** The delivery, if it's still on this run and in the state the job expects. */

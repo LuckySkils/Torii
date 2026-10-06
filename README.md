@@ -289,6 +289,7 @@ With Docker, prefix these with `docker compose exec torii php artisan`. Most of 
 | `images:fetch {--missing} {--all}` | Fetch posters from SubsPlease |
 | `shows:recompute-premiere` | Recalculate premiere dates and seasons |
 | `releases:recheck-errors` | Re-check failed queue attempts against qBittorrent |
+| `reconciler:replay {delivery*} {--downloaded}` | Delivery reconciler: re-run deliveries against the Shoko events stored in the last 14 days (safe to re-run) |
 | `releases:fix-published` | Recompute every release time from the raw feed value and `FEED_PUBDATE_OFFSET_MINUTES` (safe to re-run) |
 
 ## Limitations

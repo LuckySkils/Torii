@@ -31,8 +31,8 @@ final class ProcessReconcilerEvent implements ShouldQueue
         }
 
         match ($event->type) {
-            ReconcilerEventType::FileMatched => $reconciler->fileMatched($event->payload),
-            ReconcilerEventType::SeriesAdded => $reconciler->seriesAdded($event->payload),
+            ReconcilerEventType::FileMatched => $reconciler->fileMatched($event->payload, $event->id),
+            ReconcilerEventType::SeriesAdded => $reconciler->seriesAdded($event->payload, $event->id),
             ReconcilerEventType::LibraryChanged => $reconciler->libraryChanged(),
         };
 

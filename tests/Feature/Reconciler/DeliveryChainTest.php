@@ -22,6 +22,7 @@ use App\Services\Reconciler\JellyfinClient;
 use App\Services\Reconciler\JellyfinEvents;
 use App\Services\Reconciler\ShokoEvents;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 
@@ -536,4 +537,159 @@ test('recorded events are pruned after 14 days', function () {
     $this->artisan('model:prune', ['--model' => [ReconcilerEvent::class]])->assertSuccessful();
 
     expect(ReconcilerEvent::count())->toBe(1);
+});
+
+// ── Events that arrive before Torii notices the download ─────────────────────
+
+/**
+ * @return array<int, int>
+ */
+function appliedEvents(Delivery $delivery): array
+{
+    return DB::table('delivery_events')->where('delivery_id', $delivery->id)->orderBy('reconciler_event_id')->pluck('reconciler_event_id')->all();
+}
+
+function stuckDelivery(string $title = PSYREN): Delivery
+{
+    // As the code before the fix created it: no replay.
+    $release = Release::create([
+        'guid' => 'guid-'.md5($title), 'title' => $title, 'episode' => '01', 'is_batch' => false, 'resolution' => '1080p',
+        'link' => 'magnet:?x', 'published_at' => now(), 'first_seen_at' => now(), 'downloaded_at' => now(),
+    ]);
+
+    return Delivery::create(['release_id' => $release->id, 'filename' => $title]);
+}
+
+test('a file.matched that arrived before the delivery is applied when the delivery is created', function () {
+    fakeJellyfin([true], [4]);
+    listen('shoko', shokoCapture()[2]); // FileMatched, 47 s before Torii's poll notices the download
+    drain();
+    expect(Delivery::count())->toBe(0);
+
+    downloaded();
+    drain();
+
+    expect(psyrenDelivery())->state->toBe(DeliveryState::AwaitingSeries)
+        ->shoko_file_id->toBe(2553)->anidb_anime_id->toBe(19765)->is_new_show->toBeTrue();
+    Queue::assertNotPushed(CheckDeliveryInJellyfin::class);
+
+    // The series arrives afterwards, live, as before.
+    listen('shoko', shokoCapture()[4]);
+    listen('shoko', shokoCapture()[6]);
+    drain();
+
+    expect(psyrenDelivery()->state)->toBe(DeliveryState::Playable)
+        ->and(appliedEvents(psyrenDelivery()))->toHaveCount(3);
+});
+
+test('the whole new-show sequence finishing before Torii notices the download is replayed in order', function () {
+    fakeJellyfin([false, false, false, true], [0, 0, 0, 4]);
+    replayPsyrenShoko(); // file.matched, series.added (AniDB), series.added (Shoko): all before the delivery
+    expect(Delivery::count())->toBe(0);
+
+    downloaded();
+    drain();
+    expect(psyrenDelivery())->toMatchArray(['shoko_series_id' => 230])->state->toBe(DeliveryState::FixingA);
+    Queue::assertPushed(CheckDeliveryInJellyfin::class, fn ($job) => $job->phase === DeliveryReconciler::INITIAL && $job->attempt === 1);
+
+    replayLibraryChanged();
+
+    expect(psyrenDelivery())->state->toBe(DeliveryState::Playable)->fix_attempted->toBe(FixAttempted::AThenB)
+        ->and(appliedEvents(psyrenDelivery()))->toBe(ReconcilerEvent::where('type', '!=', 'library.changed')->orderBy('id')->pluck('id')->all());
+});
+
+test('the usual order still works, and nothing is applied twice', function () {
+    fakeJellyfin([true], [4]);
+    downloaded();
+    drain();
+    replayPsyrenShoko();
+
+    expect(psyrenDelivery()->state)->toBe(DeliveryState::Playable)
+        ->and(appliedEvents(psyrenDelivery()))->toHaveCount(3)
+        ->and(app(DeliveryReconciler::class)->replayStoredEvents(psyrenDelivery()))->toBe(0);
+    Queue::assertPushed(CheckDeliveryInJellyfin::class, 1);
+});
+
+test('replaying twice applies each event once', function () {
+    fakeJellyfin([true], [4]);
+    replayPsyrenShoko();
+    $delivery = stuckDelivery();
+    $reconciler = app(DeliveryReconciler::class);
+
+    expect($reconciler->replayStoredEvents($delivery))->toBe(3)
+        ->and($reconciler->replayStoredEvents($delivery))->toBe(0);
+    Queue::assertPushed(CheckDeliveryInJellyfin::class, 1);
+});
+
+test('another file\'s events are not replayed onto a delivery', function () {
+    $other = shokoCapture()[2];
+    $other['arguments'][0]['RelativePath'] = '/[SubsPlease] PSYREN - 02 (1080p) [AAAAAAAA].mkv';
+    listen('shoko', $other);
+    drain();
+
+    downloaded();
+    drain();
+
+    expect(psyrenDelivery()->state)->toBe(DeliveryState::Downloaded)
+        ->and(appliedEvents(psyrenDelivery()))->toBe([]);
+});
+
+test('reconciler:replay re-runs a delivery created before the fix, like production delivery #1', function () {
+    fakeJellyfin([true], [0]);
+    // Shiotaiou no Satou-san 01, as production recorded it: file.matched (AniDB 19955, no
+    // Shoko series), then the series from AniDB (Shoko 232) and from Shoko.
+    $file = '[SubsPlease] Shiotaiou no Satou-san - 01 (1080p) [ABCDEF12].mkv';
+    listen('shoko', ['target' => 'ShokoEvent:FileMatched', 'arguments' => [['FileID' => 2600, 'FileLocationID' => 3100, 'ImportFolderID' => 1, 'RelativePath' => "/{$file}",
+        'CrossReferences' => [['GroupID' => null, 'SeriesID' => null, 'EpisodeID' => null, 'AnidbAnimeID' => 19955, 'AnidbEpisodeID' => 316930]]]]]);
+    listen('shoko', ['target' => 'ShokoEvent:SeriesUpdated', 'arguments' => [['Source' => 'AniDB', 'Reason' => 'Added', 'SeriesID' => 19955, 'ShokoSeriesIDs' => [232], 'Episodes' => []]]]);
+    listen('shoko', ['target' => 'ShokoEvent:SeriesUpdated', 'arguments' => [['Source' => 'Shoko', 'Reason' => 'Added', 'SeriesID' => 232, 'ShokoSeriesIDs' => [232], 'Episodes' => []]]]);
+    drain();
+    $stuck = stuckDelivery($file);
+    config(['subtracker.reconciler.dry_run' => true]);
+
+    $this->artisan('reconciler:replay', ['delivery' => [$stuck->id]])
+        ->expectsTable(['Delivery', 'File', 'Events applied', 'State now'], [[$stuck->id, $file, 3, 'awaiting_series']])
+        ->expectsOutputToContain('Dry run')
+        ->assertSuccessful();
+    drain();
+
+    // Jellyfin never lists Shoko file 2600 here: check A decides on fix A, recorded only.
+    expect($stuck->fresh())->state->toBe(DeliveryState::FixingA)
+        ->shoko_series_id->toBe(232)
+        ->would_have_fixed->toBe('fix A (refresh the Anime library)');
+
+    drain([FinishLibraryRefresh::class]); // the refresh timeout passes (nothing was refreshed)
+
+    expect($stuck->fresh())->state->toBe(DeliveryState::GaveUp)
+        ->last_error->toBe('Failure A: the episode never reached Jellyfin, even after the Anime library refresh. (Dry run: no fix was sent.)')
+        ->and(jellyfinWrites())->toBe([]);
+
+    $this->artisan('reconciler:replay', ['delivery' => [$stuck->id]])
+        ->expectsTable(['Delivery', 'File', 'Events applied', 'State now'], [[$stuck->id, $file, 0, 'gave_up']])
+        ->assertSuccessful();
+});
+
+test('reconciler:replay --downloaded picks every delivery still at downloaded', function () {
+    replayPsyrenShoko();
+    stuckDelivery();
+
+    $this->artisan('reconciler:replay', ['--downloaded' => true])->assertSuccessful();
+    expect(psyrenDelivery()->state)->toBe(DeliveryState::AwaitingSeries);
+
+    $this->artisan('reconciler:replay')->expectsOutputToContain('Name delivery ids, or pass --downloaded.')->assertFailed();
+});
+
+test('repair forgets what was applied and replays the stored events from the start', function () {
+    fakeJellyfin([true], [0]);
+    downloaded();
+    replayPsyrenShoko();
+    expect(psyrenDelivery()->state)->toBe(DeliveryState::GaveUp)
+        ->and(appliedEvents(psyrenDelivery()))->toHaveCount(3);
+
+    app(DeliveryReconciler::class)->repair(psyrenDelivery());
+
+    // The AniDB mapping is already in place, so that event changes nothing and isn't claimed.
+    expect(psyrenDelivery())->run->toBe(2)->state->toBe(DeliveryState::AwaitingSeries)
+        ->and(appliedEvents(psyrenDelivery()))->toHaveCount(2);
+    Queue::assertPushed(CheckDeliveryInJellyfin::class, fn ($job) => $job->run === 2 && $job->attempt === 1);
 });
