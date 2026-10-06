@@ -106,6 +106,20 @@ final class SendNotification implements ShouldQueue
             // Sent synchronously by NotificationController::test; this job never
             // handles the "test" kind.
             NotificationKind::Test => null,
+            NotificationKind::DeliveryFixed => $release->delivery === null ? null : new NotificationMessage(
+                title: "{$show->name} — episode {$release->episode} repaired in Jellyfin",
+                message: 'Torii ran '.$release->delivery->fix_attempted->label().' and the episode is playable now.',
+                tags: ['wrench'],
+                clickUrl: $this->clickUrl($show),
+            ),
+            NotificationKind::DeliveryGaveUp => $release->delivery === null ? null : new NotificationMessage(
+                title: "{$show->name} — episode {$release->episode} needs a manual library scan",
+                message: trim(($release->delivery->last_error ?? '').' Tried: '.$release->delivery->fix_attempted->label().'.')
+                    .' Run Scan All Libraries in Jellyfin.',
+                tags: ['warning'],
+                priority: 4,
+                clickUrl: $this->clickUrl($show),
+            ),
         };
     }
 

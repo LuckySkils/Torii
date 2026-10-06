@@ -73,7 +73,19 @@ ENV APP_NAME=Torii \
     NOTIFY_NEW_EPISODE=true \
     NOTIFY_DOWNLOADED=true \
     NOTIFY_REPACKS=false     TORII_PORT=8080     MCP_ENABLED=false     MCP_PORT=""     MCP_ALLOW_WRITES=false     MCP_TOKEN=""     MCP_MAX_RESULTS=50 \
-    NYAA_TRACKERS=""
+    NYAA_TRACKERS="" \
+    RECONCILER_ENABLED=false \
+    RECONCILER_DRY_RUN=true \
+    SHOKO_URL="" \
+    SHOKO_API_KEY="" \
+    JELLYFIN_URL="" \
+    JELLYFIN_API_KEY="" \
+    JELLYFIN_ANIME_LIBRARY_ID="" \
+    JELLYFIN_DEVICE_ID=torii-reconciler \
+    RECONCILER_BACKOFF=3,7,15 \
+    RECONCILER_LIBRARY_REFRESH_TIMEOUT=300 \
+    RECONCILER_LISTENER_LIFETIME=86400 \
+    RECONCILER_NOTIFY_ON_FIX=true
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 COPY composer.json composer.lock ./

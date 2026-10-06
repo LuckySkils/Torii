@@ -3,6 +3,7 @@
 use App\Http\Controllers\AnimeController;
 use App\Http\Controllers\AnimeLinkController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DeliveryController;
 use App\Http\Controllers\ImageController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\NyaaImportController;
@@ -25,6 +26,9 @@ Route::get('shows/{show}/matches', [ShowTrackingController::class, 'matches'])->
 Route::post('shows/{show}/queue-missing', [ShowTrackingController::class, 'queueMissing'])->name('shows.queue-missing');
 
 Route::post('releases/{release}/download', [ReleaseController::class, 'download'])->name('releases.download');
+
+// Delivery reconciler (§17): re-run one delivery's chain from the start.
+Route::post('deliveries/{delivery}/repair', [DeliveryController::class, 'repair'])->name('deliveries.repair');
 
 // Import from a Nyaa RSS link (§16). The preview fetches a user-supplied URL, hence the limit.
 Route::post('import/nyaa/preview', [NyaaImportController::class, 'preview'])->middleware('throttle:nyaa-import')->name('import.nyaa.preview');

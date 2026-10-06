@@ -6,6 +6,7 @@ use App\Models\BootstrapTask;
 use App\Models\FeedPoll;
 use App\Models\NotificationLog;
 use App\Services\Bootstrap\BootstrapTasks;
+use App\Services\Reconciler\ListenerHeartbeat;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 
@@ -154,4 +155,27 @@ test('bootstrap: a failed task is a problem with its error; pending tasks are on
     BootstrapTask::where('key', 'anime.initial-sync')->update(['completed_at' => now(), 'error' => null]);
 
     expect(healthChecks()['bootstrap'])->toMatchArray(['ok' => true, 'detail' => 'In progress: 6 of 7 tasks done.']);
+});
+
+test('the reconciler listener check appears only with the reconciler on: connected, disconnected, or gone', function () {
+    fakeQbit();
+    config(['subtracker.reconciler.enabled' => true]);
+    $listener = fn () => collect(test()->get('/')->assertOk()->viewData('page')['props']['health']['checks'])->firstWhere('key', 'reconciler.listener');
+    $heartbeat = app(ListenerHeartbeat::class);
+
+    expect($listener())->toMatchArray(['ok' => false])
+        ->and($listener()['detail'])->toContain('Shoko: no heartbeat');
+
+    $heartbeat->beat('shoko', true);
+    $heartbeat->beat('jellyfin', false);
+    expect($listener()['detail'])->toStartWith('Reconciler listener disconnected. Jellyfin: disconnected since');
+
+    $heartbeat->beat('jellyfin', true);
+    expect($listener())->toMatchArray(['ok' => true, 'detail' => null]);
+
+    $this->travel(3)->minutes();
+    expect($listener()['ok'])->toBeFalse();
+
+    config(['subtracker.reconciler.enabled' => false]);
+    expect($listener())->toBeNull();
 });

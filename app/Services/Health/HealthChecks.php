@@ -8,6 +8,7 @@ use App\Enums\NotificationStatus;
 use App\Models\FeedPoll;
 use App\Models\NotificationLog;
 use App\Services\QBittorrent\QbitHealth;
+use App\Services\Reconciler\ListenerHeartbeat;
 
 /**
  * The dashboard's health as a flat list of checks, `ok` or not, so the UI can
@@ -32,6 +33,8 @@ final class HealthChecks
             $this->notifications(),
             $this->bootstrap($bootstrap),
             $this->feedPolling($lastPoll),
+            // Only while the optional reconciler (§17) is switched on.
+            ...(config('subtracker.reconciler.enabled') ? [$this->reconcilerListener()] : []),
         ];
 
         return array_map(fn (array $check) => [...$check, 'skipped' => $check['skipped'] ?? false], $checks);
@@ -93,6 +96,34 @@ final class HealthChecks
             'ok' => ! $failed,
             'label' => 'Notifications',
             'detail' => $failed ? "Last notification failed: {$last->error}" : null,
+        ];
+    }
+
+    /**
+     * The reconciler listener's two connections, from its heartbeat (§17). A
+     * heartbeat that stopped being written means the listener container is down.
+     *
+     * @return array{key: string, ok: bool, label: string, detail: string|null}
+     */
+    private function reconcilerListener(): array
+    {
+        $problems = [];
+
+        foreach (app(ListenerHeartbeat::class)->status() as $connection => $status) {
+            $name = $connection === 'shoko' ? 'Shoko' : 'Jellyfin';
+
+            if (! $status['fresh']) {
+                $problems[] = "{$name}: no heartbeat (is the torii-listener container running?)";
+            } elseif (! $status['connected']) {
+                $problems[] = "{$name}: disconnected".($status['since'] !== null ? ' since '.$status['since'] : '');
+            }
+        }
+
+        return [
+            'key' => 'reconciler.listener',
+            'ok' => $problems === [],
+            'label' => 'Reconciler listener',
+            'detail' => $problems === [] ? null : 'Reconciler listener disconnected. '.implode('; ', $problems).'.',
         ];
     }
 

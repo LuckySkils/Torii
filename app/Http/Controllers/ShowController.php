@@ -137,7 +137,7 @@ class ShowController extends Controller
     {
         return Inertia::render('Shows/Show', [
             'show' => (new ShowResource($show))->withFullAnime()->resolve(),
-            'releases' => $show->releases()->latest('published_at')->get()
+            'releases' => $show->releases()->with('delivery')->latest('published_at')->get()
                 ->map(fn (Release $release) => (new ReleaseResource($release))->resolve())
                 ->all(),
         ]);

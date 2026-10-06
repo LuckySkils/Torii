@@ -34,6 +34,8 @@ final class ReleaseResource extends JsonResource
             'dispatchedAt' => $this->dispatched_at?->toIso8601String(),
             'dispatchError' => $this->dispatch_error,
             'downloadedAt' => $this->downloaded_at?->toIso8601String(),
+            // Its trail towards Jellyfin when the reconciler tracks it (§17), else null.
+            'delivery' => $this->delivery?->toProps(),
         ];
     }
 }

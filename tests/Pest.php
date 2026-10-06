@@ -172,3 +172,31 @@ function mcpToolError(string $name, array $arguments = []): string
 
     return $result['content'][0]['text'];
 }
+
+// ── Delivery reconciler (§17): the handoff's raw captures in tests/Fixtures/reconciler/ ──
+
+const ANIME_LIBRARY = '0c419071-40d8-02bb-5843-0fed7e2cd79e';
+
+/**
+ * The handoff's Shoko capture: one `time target [arguments]` line per message.
+ *
+ * @return array<int, array{target: string, arguments: array<int, mixed>}>
+ */
+function shokoCapture(string $fixture = 'psyren_shoko_signalr.txt'): array
+{
+    $lines = preg_split('/\R/', trim(file_get_contents(base_path("tests/Fixtures/reconciler/{$fixture}"))));
+
+    return array_map(function (string $line): array {
+        preg_match('/^(?:\S+\s+)?(\S+)\s+(\[.*\])$/', $line, $match);
+
+        return ['target' => $match[1], 'arguments' => json_decode($match[2], true, flags: JSON_THROW_ON_ERROR)];
+    }, $lines);
+}
+
+/**
+ * @return array<int, array<string, mixed>>
+ */
+function jellyfinCapture(): array
+{
+    return array_map(fn (string $line) => json_decode($line, true, flags: JSON_THROW_ON_ERROR), preg_split('/\R/', trim(file_get_contents(base_path('tests/Fixtures/reconciler/jellyfin_socket.jsonl')))));
+}

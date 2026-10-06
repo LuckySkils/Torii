@@ -38,6 +38,34 @@ return [
         ],
     ],
 
+    // Delivery reconciler (§17): optional, needs Shoko + Shokofin + Jellyfin.
+    'reconciler' => [
+        'enabled' => filter_var(env('RECONCILER_ENABLED', false), FILTER_VALIDATE_BOOL),
+        // Dry run unless explicitly switched off: an empty or misspelled value stays dry,
+        // since the test stand talks to the real Shoko and Jellyfin.
+        // (env() turns "false" into a boolean false; any other false-ish word is matched as text.)
+        'dry_run' => ($dryRun = env('RECONCILER_DRY_RUN', 'true')) !== false
+            && ! in_array(strtolower(trim((string) $dryRun)), ['false', '0', 'off', 'no'], true),
+        'shoko_url' => rtrim((string) env('SHOKO_URL', ''), '/'),
+        'shoko_api_key' => (string) env('SHOKO_API_KEY', ''),
+        'jellyfin_url' => rtrim((string) env('JELLYFIN_URL', ''), '/'),
+        'jellyfin_api_key' => (string) env('JELLYFIN_API_KEY', ''),
+        'jellyfin_anime_library_id' => (string) env('JELLYFIN_ANIME_LIBRARY_ID', ''),
+        // Stable across restarts, so Jellyfin sees one device, not a new session each time.
+        'jellyfin_device_id' => ((string) env('JELLYFIN_DEVICE_ID', '')) ?: 'torii-reconciler',
+        // Seconds after the trigger at which each check attempt runs.
+        'backoff' => array_values(array_map('intval', array_filter(array_map('trim', explode(',', (string) env('RECONCILER_BACKOFF', '3,7,15'))), 'is_numeric'))) ?: [3, 7, 15],
+        'library_refresh_timeout' => (int) env('RECONCILER_LIBRARY_REFRESH_TIMEOUT', 300),
+        'listener_lifetime' => (int) env('RECONCILER_LISTENER_LIFETIME', 86400),
+        'notify_on_fix' => filter_var(env('RECONCILER_NOTIFY_ON_FIX', true), FILTER_VALIDATE_BOOL),
+        'event_retention_days' => 14,
+        'shoko_ping_seconds' => 15,
+        'jellyfin_keepalive_seconds' => 30,
+        // A heartbeat older than this means the listener is gone.
+        'heartbeat_stale_seconds' => 120,
+        'recent_episodes_limit' => 50,
+    ],
+
     // Import from a Nyaa RSS link (§16).
     'nyaa' => [
         // Announce URLs added to every magnet built from a Nyaa item, in this order.

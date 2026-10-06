@@ -61,6 +61,7 @@ class DashboardController extends Controller
                 'show' => fn ($query) => $query->withExists('animeSuggestions'),
                 'show.image' => fn ($query) => $query->select(['id', 'show_id', 'sha256']),
                 'show.animeLink.anime.image' => fn ($query) => $query->select(['id', 'anime_id', 'sha256', 'width', 'height']),
+                'delivery',
             ])
             ->orderByDesc('published_at')
             ->orderByDesc('first_seen_at')

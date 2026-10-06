@@ -153,6 +153,36 @@ or by running `docker compose -f docker-compose.yml -f docker-compose.mcp.yml up
 
 The endpoint speaks MCP protocol `2026-07-28` and, for clients that still use the `initialize` handshake, `2025-11-25` and `2025-06-18`. It is rate-limited to 120 requests a minute, and list tools return at most `MCP_MAX_RESULTS` rows.
 
+### Delivery reconciler (optional)
+
+**Only for setups with Shoko Server, the Shokofin plugin and Jellyfin.** Torii works exactly as before without it.
+
+For a brand-new show, Shokofin sometimes never puts the first episode into Jellyfin (failure A), or Jellyfin creates the series with an empty episode list so Play fails (failure B). The reconciler watches Shoko's and Jellyfin's live events for every episode Torii downloads, checks new shows a few seconds after each step, and repairs those two cases: an Anime-library refresh for A, a single-series refresh for B. If a repair doesn't help, it stops and sends a notification saying a manual **Scan All Libraries** is needed. New episodes of shows Jellyfin already has are only tracked, never touched.
+
+It runs as a second container from the same image:
+
+```env
+# With ntfy too: COMPOSE_PROFILES=notifications,reconciler
+COMPOSE_PROFILES=reconciler
+RECONCILER_ENABLED=true
+SHOKO_URL=http://192.168.1.10:8111
+SHOKO_API_KEY=...
+JELLYFIN_URL=http://192.168.1.10:8096
+# Jellyfin Dashboard -> API Keys
+JELLYFIN_API_KEY=...
+JELLYFIN_ANIME_LIBRARY_ID=...
+```
+
+Use direct LAN addresses rather than reverse-proxy names, so it doesn't depend on the proxy being up. Jellyfin takes a Dashboard API key and Shoko its API key; both go in the connection URLs, no other login is needed. The dashboard shows a problem if the listener loses either connection.
+
+**Start in dry run, then switch it off.** With `RECONCILER_DRY_RUN=true` (the default) the reconciler listens, checks and decides, but sends nothing: each episode records which fix it would have sent. Turning it on for real:
+
+1. Deploy with `RECONCILER_ENABLED=true` and `RECONCILER_DRY_RUN=true`.
+2. When the next new shows arrive, compare each episode's recorded decision (whether it found a problem, and which fix it would have run) with what actually happened in Jellyfin.
+3. Once at least one new show's decisions matched reality, set `RECONCILER_DRY_RUN=false` in `.env` and run `docker compose up -d`, so both `torii` and `torii-listener` pick it up.
+
+A separate test install of Torii can't do step 2: its own downloads never reach the folder Shoko watches, so only the real install sees the episodes Shoko and Jellyfin act on.
+
 ## Installation without Docker
 
 Requirements:
@@ -228,6 +258,16 @@ For a permanent setup, run these under systemd or Supervisor. Restart `queue:wor
 | `MCP_ALLOW_WRITES` | `false` | Also offer the tools that track/untrack shows and queue downloads. Off: they aren't listed at all. |
 | `MCP_MAX_RESULTS` | `50` | Hard cap on rows any MCP tool returns |
 | `NYAA_TRACKERS` | *(five public trackers)* | Comma-separated trackers added to magnets built by the Nyaa import |
+| `RECONCILER_ENABLED` | `false` | Optional delivery reconciler (needs Shoko + Shokofin + Jellyfin); see "Delivery reconciler" |
+| `RECONCILER_DRY_RUN` | `true` | Only record the fixes it would send. Anything but an explicit `false` stays dry. |
+| `SHOKO_URL` / `SHOKO_API_KEY` | | Shoko Server, by direct LAN address, and an API key (`POST /api/auth`) |
+| `JELLYFIN_URL` / `JELLYFIN_API_KEY` | | Jellyfin, by direct LAN address, and a Dashboard API key |
+| `JELLYFIN_ANIME_LIBRARY_ID` | | The Jellyfin library Shokofin manages for series |
+| `JELLYFIN_DEVICE_ID` | `torii-reconciler` | Stable device id for the listener's Jellyfin connection |
+| `RECONCILER_BACKOFF` | `3,7,15` | Seconds after a trigger at which each check attempt runs |
+| `RECONCILER_LIBRARY_REFRESH_TIMEOUT` | `300` | Seconds to wait for a library refresh's completion event before re-checking anyway |
+| `RECONCILER_LISTENER_LIFETIME` | `86400` | The listener exits after this many seconds and Docker restarts it |
+| `RECONCILER_NOTIFY_ON_FIX` | `true` | Also notify when an automatic fix worked (giving up always notifies) |
 
 In qBittorrent, RSS processing and RSS auto-downloading must be enabled. `php artisan qbit:setup --fix-prefs` turns them on for you.
 

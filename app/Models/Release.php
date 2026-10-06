@@ -8,6 +8,7 @@ use App\Enums\DispatchStatus;
 use App\Enums\ReleaseSource;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Release extends Model
 {
@@ -55,6 +56,12 @@ class Release extends Model
     public function show(): BelongsTo
     {
         return $this->belongsTo(Show::class);
+    }
+
+    /** Its trail towards Jellyfin, when the reconciler is on (§17). */
+    public function delivery(): HasOne
+    {
+        return $this->hasOne(Delivery::class);
     }
 
     /**

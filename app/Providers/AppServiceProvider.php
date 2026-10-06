@@ -10,6 +10,8 @@ use App\Services\Metadata\MetadataProviders;
 use App\Services\Notifications\NtfyNotifier;
 use App\Services\Notifications\NullNotifier;
 use App\Services\QBittorrent\RulesDriver;
+use App\Services\Reconciler\Listener\AmphpSocketConnector;
+use App\Services\Reconciler\Listener\SocketConnector;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -30,6 +32,9 @@ class AppServiceProvider extends ServiceProvider
                 ),
             };
         });
+
+        // The reconciler listener's WebSockets (§17); tests bind a scripted fake.
+        $this->app->bind(SocketConnector::class, AmphpSocketConnector::class);
 
         $this->app->bind(Notifier::class, function () {
             return config('subtracker.notifications.enabled')

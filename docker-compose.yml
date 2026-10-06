@@ -1,6 +1,46 @@
 # Torii: SubsPlease show tracker for qBittorrent
 # Usage: put this file and .env (from .env.example) in one folder, then `docker compose up -d`.
-# Every setting from .env must also be listed under `environment:` below to reach the container.
+# Every setting from .env must also be listed under `x-torii-environment:` below to reach the containers.
+
+# Settings shared by Torii and its optional reconciler listener.
+x-torii-environment: &torii-environment
+  QBIT_URL: ${QBIT_URL:?Set QBIT_URL in .env}
+  QBIT_USERNAME: ${QBIT_USERNAME:-}
+  QBIT_PASSWORD: ${QBIT_PASSWORD:-}
+  QBIT_CATEGORY: ${QBIT_CATEGORY:-anime}
+  APP_URL: ${APP_URL:-http://localhost:8080}
+  DB_PASSWORD: ${DB_PASSWORD:-torii}
+  # SubsPlease's pubDate runs this many minutes off UTC (may need -480 after US DST ends)
+  FEED_PUBDATE_OFFSET_MINUTES: ${FEED_PUBDATE_OFFSET_MINUTES:--420}
+  # Notifications: empty NTFY_URL = off
+  NTFY_URL: ${NTFY_URL:-}
+  NTFY_TOPIC: ${NTFY_TOPIC:-torii}
+  NTFY_TOKEN: ${NTFY_TOKEN:-}
+  NOTIFY_CLICK_URL: ${NOTIFY_CLICK_URL:-}
+  # Lets the container refuse an MCP_PORT equal to the UI's published port
+  TORII_PORT: ${TORII_PORT:-8080}
+  # MCP server (off by default). MCP_PORT only gets published with docker-compose.mcp.yml (see README)
+  MCP_ENABLED: ${MCP_ENABLED:-false}
+  MCP_PORT: ${MCP_PORT:-}
+  MCP_ALLOW_WRITES: ${MCP_ALLOW_WRITES:-false}
+  MCP_TOKEN: ${MCP_TOKEN:-}
+  MCP_MAX_RESULTS: ${MCP_MAX_RESULTS:-50}
+  # Trackers for magnets built by the Nyaa import; empty = Torii's defaults
+  NYAA_TRACKERS: ${NYAA_TRACKERS:-}
+  # Delivery reconciler (optional, needs Shoko + Shokofin + Jellyfin; see README).
+  # The listener runs with COMPOSE_PROFILES=reconciler. Dry run unless set to false.
+  RECONCILER_ENABLED: ${RECONCILER_ENABLED:-false}
+  RECONCILER_DRY_RUN: ${RECONCILER_DRY_RUN:-true}
+  SHOKO_URL: ${SHOKO_URL:-}
+  SHOKO_API_KEY: ${SHOKO_API_KEY:-}
+  JELLYFIN_URL: ${JELLYFIN_URL:-}
+  JELLYFIN_API_KEY: ${JELLYFIN_API_KEY:-}
+  JELLYFIN_ANIME_LIBRARY_ID: ${JELLYFIN_ANIME_LIBRARY_ID:-}
+  JELLYFIN_DEVICE_ID: ${JELLYFIN_DEVICE_ID:-torii-reconciler}
+  RECONCILER_BACKOFF: ${RECONCILER_BACKOFF:-3,7,15}
+  RECONCILER_LIBRARY_REFRESH_TIMEOUT: ${RECONCILER_LIBRARY_REFRESH_TIMEOUT:-300}
+  RECONCILER_LISTENER_LIFETIME: ${RECONCILER_LISTENER_LIFETIME:-86400}
+  RECONCILER_NOTIFY_ON_FIX: ${RECONCILER_NOTIFY_ON_FIX:-true}
 
 services:
   torii:
@@ -9,32 +49,27 @@ services:
     restart: unless-stopped
     ports:
       - "${TORII_PORT:-8080}:80"
-    environment:
-      QBIT_URL: ${QBIT_URL:?Set QBIT_URL in .env}
-      QBIT_USERNAME: ${QBIT_USERNAME:-}
-      QBIT_PASSWORD: ${QBIT_PASSWORD:-}
-      QBIT_CATEGORY: ${QBIT_CATEGORY:-anime}
-      APP_URL: ${APP_URL:-http://localhost:8080}
-      DB_PASSWORD: ${DB_PASSWORD:-torii}
-      # SubsPlease's pubDate runs this many minutes off UTC (may need -480 after US DST ends)
-      FEED_PUBDATE_OFFSET_MINUTES: ${FEED_PUBDATE_OFFSET_MINUTES:--420}
-      # Notifications: empty NTFY_URL = off
-      NTFY_URL: ${NTFY_URL:-}
-      NTFY_TOPIC: ${NTFY_TOPIC:-torii}
-      NTFY_TOKEN: ${NTFY_TOKEN:-}
-      NOTIFY_CLICK_URL: ${NOTIFY_CLICK_URL:-}
-      # Lets the container refuse an MCP_PORT equal to the UI's published port
-      TORII_PORT: ${TORII_PORT:-8080}
-      # MCP server (off by default). MCP_PORT only gets published with docker-compose.mcp.yml (see README)
-      MCP_ENABLED: ${MCP_ENABLED:-false}
-      MCP_PORT: ${MCP_PORT:-}
-      MCP_ALLOW_WRITES: ${MCP_ALLOW_WRITES:-false}
-      MCP_TOKEN: ${MCP_TOKEN:-}
-      MCP_MAX_RESULTS: ${MCP_MAX_RESULTS:-50}
-      # Trackers for magnets built by the Nyaa import; empty = Torii's defaults
-      NYAA_TRACKERS: ${NYAA_TRACKERS:-}
+    environment: *torii-environment
     volumes:
       - ${TORII_DATA_DIR:-./data}/app:/data
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Optional delivery reconciler listener (see README, "Delivery reconciler"): the same
+  # image, holding the Shoko and Jellyfin connections. Starts only with
+  # COMPOSE_PROFILES=reconciler; the torii container's worker does the rest.
+  torii-listener:
+    image: ghcr.io/luckyskils/torii:latest
+    command: ["php", "artisan", "torii:listen"]
+    profiles: ["reconciler"]
+    restart: unless-stopped
+    environment: *torii-environment
+    volumes:
+      - ${TORII_DATA_DIR:-./data}/app:/data
+    # No web server here, so the image's /up check doesn't apply.
+    healthcheck:
+      disable: true
     depends_on:
       db:
         condition: service_healthy

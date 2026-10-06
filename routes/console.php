@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\ReconcilerEvent;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -16,3 +17,6 @@ Schedule::command('qbit:check-completed')->everyMinute()->withoutOverlapping();
 // weekly job covers the previous, current and next season plus every linked anime.
 Schedule::command('anime:sync-season --weekly')->weeklyOn(1, '04:00');
 Schedule::command('anime:sync-airings')->dailyAt('04:30');
+
+// Delivery reconciler (§17): recorded listener events are kept 14 days.
+Schedule::command('model:prune', ['--model' => [ReconcilerEvent::class]])->dailyAt('05:00');
