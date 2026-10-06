@@ -72,7 +72,8 @@ ENV APP_NAME=Torii \
     NTFY_TOKEN="" \
     NOTIFY_NEW_EPISODE=true \
     NOTIFY_DOWNLOADED=true \
-    NOTIFY_REPACKS=false     TORII_PORT=8080     MCP_ENABLED=false     MCP_PORT=""     MCP_ALLOW_WRITES=false     MCP_TOKEN=""     MCP_MAX_RESULTS=50
+    NOTIFY_REPACKS=false     TORII_PORT=8080     MCP_ENABLED=false     MCP_PORT=""     MCP_ALLOW_WRITES=false     MCP_TOKEN=""     MCP_MAX_RESULTS=50 \
+    NYAA_TRACKERS=""
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 COPY composer.json composer.lock ./

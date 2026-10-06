@@ -227,6 +227,7 @@ For a permanent setup, run these under systemd or Supervisor. Restart `queue:wor
 | `MCP_TOKEN` | *(empty)* | Bearer token; when set, every MCP request needs `Authorization: Bearer <token>` |
 | `MCP_ALLOW_WRITES` | `false` | Also offer the tools that track/untrack shows and queue downloads. Off: they aren't listed at all. |
 | `MCP_MAX_RESULTS` | `50` | Hard cap on rows any MCP tool returns |
+| `NYAA_TRACKERS` | *(five public trackers)* | Comma-separated trackers added to magnets built by the Nyaa import |
 
 In qBittorrent, RSS processing and RSS auto-downloading must be enabled. `php artisan qbit:setup --fix-prefs` turns them on for you.
 

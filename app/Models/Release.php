@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\DispatchStatus;
+use App\Enums\ReleaseSource;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -31,6 +32,8 @@ class Release extends Model
         'dispatch_error',
         'dispatch_status',
         'downloaded_at',
+        'source',
+        'torrent_url',
     ];
 
     protected function casts(): array
@@ -45,6 +48,7 @@ class Release extends Model
             'dispatched_at' => 'datetime',
             'dispatch_status' => DispatchStatus::class,
             'downloaded_at' => 'datetime',
+            'source' => ReleaseSource::class,
         ];
     }
 

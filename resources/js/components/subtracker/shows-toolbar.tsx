@@ -3,11 +3,11 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { cn } from '@/lib/utils';
 import { type FilterNavigation, type QueryParams } from '@/hooks/use-filter-navigation';
+import { cn } from '@/lib/utils';
 import { type FilterOptions, type ShowFilters } from '@/types/subtracker';
 import { LayoutGrid, List, Loader2, SlidersHorizontal } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { FormatFilter, GenreFilter } from './facet-filters';
 
 interface ShowsToolbarProps {
@@ -16,6 +16,8 @@ interface ShowsToolbarProps {
     nav: FilterNavigation<ShowFilters>;
     view: 'grid' | 'list';
     onViewChange: (view: 'grid' | 'list') => void;
+    /** Extra controls for the phone row, after the view toggle (e.g. "Import"). */
+    phoneActions?: ReactNode;
 }
 
 /** "Needs review · N" — a toggle for /shows?review=1, combinable with the other filters. */
@@ -62,7 +64,7 @@ export function clearedShowFilters(sort: ShowFilters['sort']): ShowFilters {
     return { q: '', tracked: 'all', sort, season: null, year: null, review: false, format: [], genresInclude: [], genresExclude: [] };
 }
 
-export function ShowsToolbar({ filters, options, nav, view, onViewChange }: ShowsToolbarProps) {
+export function ShowsToolbar({ filters, options, nav, view, onViewChange, phoneActions }: ShowsToolbarProps) {
     const [filtersOpen, setFiltersOpen] = useState(false);
     const submit = nav.submit;
     const reviewCount = options.reviewCount;
@@ -200,7 +202,12 @@ export function ShowsToolbar({ filters, options, nav, view, onViewChange }: Show
                             {(reviewCount > 0 || filters.review) && (
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-sm font-medium">Metadata</label>
-                                    <ReviewToggle className="w-full" active={filters.review} count={reviewCount} onToggle={() => submit({ review: !filters.review })} />
+                                    <ReviewToggle
+                                        className="w-full"
+                                        active={filters.review}
+                                        count={reviewCount}
+                                        onToggle={() => submit({ review: !filters.review })}
+                                    />
                                 </div>
                             )}
 
@@ -224,6 +231,7 @@ export function ShowsToolbar({ filters, options, nav, view, onViewChange }: Show
                         <List className="size-4" />
                     </ToggleGroupItem>
                 </ToggleGroup>
+                {phoneActions}
             </div>
 
             {/* Tablet and up: the inline selects, unchanged. */}
@@ -278,7 +286,12 @@ export function ShowsToolbar({ filters, options, nav, view, onViewChange }: Show
                     <SelectItem value="premiered">Premiere (newest)</SelectItem>
                 </SelectContent>
             </Select>
-            <FormatFilter className="hidden w-36 sm:flex" options={options.formats} selected={filters.format} onChange={(format) => submit({ format })} />
+            <FormatFilter
+                className="hidden w-36 sm:flex"
+                options={options.formats}
+                selected={filters.format}
+                onChange={(format) => submit({ format })}
+            />
             <GenreFilter
                 className="hidden w-40 sm:flex"
                 options={options.genres}
@@ -287,7 +300,12 @@ export function ShowsToolbar({ filters, options, nav, view, onViewChange }: Show
                 onChange={setGenres}
             />
             {(reviewCount > 0 || filters.review) && (
-                <ReviewToggle className="hidden sm:inline-flex" active={filters.review} count={reviewCount} onToggle={() => submit({ review: !filters.review })} />
+                <ReviewToggle
+                    className="hidden sm:inline-flex"
+                    active={filters.review}
+                    count={reviewCount}
+                    onToggle={() => submit({ review: !filters.review })}
+                />
             )}
         </div>
     );

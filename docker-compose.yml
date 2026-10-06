@@ -31,6 +31,8 @@ services:
       MCP_ALLOW_WRITES: ${MCP_ALLOW_WRITES:-false}
       MCP_TOKEN: ${MCP_TOKEN:-}
       MCP_MAX_RESULTS: ${MCP_MAX_RESULTS:-50}
+      # Trackers for magnets built by the Nyaa import; empty = Torii's defaults
+      NYAA_TRACKERS: ${NYAA_TRACKERS:-}
     volumes:
       - ${TORII_DATA_DIR:-./data}/app:/data
     depends_on:

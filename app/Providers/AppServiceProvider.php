@@ -51,6 +51,9 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         // MCP endpoint (§15): enough for an agent, not enough for a loop to hammer the database.
+        // Nyaa import previews fetch a user-supplied URL (§16).
+        RateLimiter::for('nyaa-import', fn (Request $request) => Limit::perMinute((int) config('subtracker.nyaa.previews_per_minute'))->by($request->ip()));
+
         RateLimiter::for('mcp', fn (Request $request) => Limit::perMinute((int) config('subtracker.mcp.rate_limit_per_minute'))
             ->by($request->ip()));
     }

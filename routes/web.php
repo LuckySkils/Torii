@@ -5,6 +5,7 @@ use App\Http\Controllers\AnimeLinkController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ImageController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\NyaaImportController;
 use App\Http\Controllers\ReleaseController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\ShowController;
@@ -24,6 +25,10 @@ Route::get('shows/{show}/matches', [ShowTrackingController::class, 'matches'])->
 Route::post('shows/{show}/queue-missing', [ShowTrackingController::class, 'queueMissing'])->name('shows.queue-missing');
 
 Route::post('releases/{release}/download', [ReleaseController::class, 'download'])->name('releases.download');
+
+// Import from a Nyaa RSS link (§16). The preview fetches a user-supplied URL, hence the limit.
+Route::post('import/nyaa/preview', [NyaaImportController::class, 'preview'])->middleware('throttle:nyaa-import')->name('import.nyaa.preview');
+Route::post('import/nyaa/confirm', [NyaaImportController::class, 'confirm'])->name('import.nyaa.confirm');
 
 Route::get('shows/{show}/image', [ImageController::class, 'show'])->name('shows.image');
 Route::post('shows/{show}/image/refresh', [ImageController::class, 'refresh'])->name('shows.image.refresh');

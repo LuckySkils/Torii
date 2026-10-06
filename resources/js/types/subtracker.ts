@@ -431,6 +431,67 @@ export interface AnimeShowProps {
     linkedShows: AnimeShowLinkedShow[];
 }
 
+/* ---------------------------------------------------------------------------
+ * Nyaa import (NyaaImportController, NyaaImportPreviews, NyaaImporter)
+ * ------------------------------------------------------------------------- */
+
+/**
+ * `new` items can still be unselected by default (a remake, or an episode covered
+ * by a batch in the list); `reason` then says why.
+ */
+export type NyaaItemState = 'new' | 'in_qbit' | 'known_release' | 'superseded' | 'unparsed';
+
+export interface NyaaPreviewItem {
+    /** Stable within the preview (Nyaa's id); what confirm takes. */
+    key: string;
+    title: string;
+    showName: string | null;
+    episode: string | null;
+    version: number | null;
+    isBatch: boolean;
+    batchFrom: number | null;
+    batchTo: number | null;
+    resolution: string | null;
+    infohash: string | null;
+    magnet: string | null;
+    torrentUrl: string;
+    viewUrl: string;
+    publishedAt: string | null;
+    /** As Nyaa writes it, e.g. "1.4 GiB". */
+    size: string | null;
+    seeders: number | null;
+    trusted: boolean;
+    remake: boolean;
+    state: NyaaItemState;
+    /** The backend's suggested default. */
+    selected: boolean;
+    /** Why it isn't selected, in plain words; null for a plain new item. */
+    reason: string | null;
+}
+
+/** POST /import/nyaa/preview — a server-side snapshot, confirmed by `previewId`. */
+export interface NyaaPreview {
+    previewId: string;
+    expiresAt: string;
+    feedTitle: string;
+    /** The feed came back full (one Nyaa page); there may be more results. */
+    truncated: boolean;
+    /** Sorted by show (unparsed last), batches first, then episode and version. */
+    items: NyaaPreviewItem[];
+    /** The one show every parsed item names; null when the feed spans several shows (or none). */
+    show: { existingShowId: number | null; name: string; willCreate: boolean } | null;
+    /** e.g. qBittorrent unreachable, or several shows in one feed. */
+    warnings: string[];
+}
+
+/** POST /import/nyaa/confirm */
+export interface NyaaConfirmResult {
+    queued: number;
+    skipped: { key: string; title: string; reason: string }[];
+    errors: { key: string; title: string; message: string }[];
+    shows: { id: number; name: string; created: boolean }[];
+}
+
 /** GET /anime/{id}/card — the hover/tap detail card (AnimeController::card, cached 2 minutes). */
 export interface AnimeCardData {
     id: number;

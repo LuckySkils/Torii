@@ -2,6 +2,7 @@ import { AnimeLinkIndicator } from '@/components/subtracker/anime-link-indicator
 import { HealthStrip } from '@/components/subtracker/health-strip';
 import { LatestReleasesTable, ReleaseEpisode, ReleaseThumb } from '@/components/subtracker/latest-releases-table';
 import { FirstEpisodeBadge, isPremiere, NewShowBadge } from '@/components/subtracker/novelty-badges';
+import { NyaaImportButton } from '@/components/subtracker/nyaa-import-dialog';
 import { ReleaseCard } from '@/components/subtracker/release-card';
 import { useAdaptivePoll } from '@/hooks/use-adaptive-poll';
 import AppLayout from '@/layouts/app-layout';
@@ -23,7 +24,10 @@ export default function Dashboard({ health, latestReleases }: DashboardProps) {
                 <HealthStrip health={health} />
 
                 <section className="flex flex-col gap-2">
-                    <h2 className="text-lg font-medium">Latest releases</h2>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h2 className="text-lg font-medium">Latest releases</h2>
+                        <NyaaImportButton className="h-8 px-3 text-xs" />
+                    </div>
 
                     {latestReleases.length === 0 ? (
                         <p className="p-4 text-sm text-muted-foreground">No releases yet.</p>
@@ -42,7 +46,9 @@ export default function Dashboard({ health, latestReleases }: DashboardProps) {
                                                 <>
                                                     {release.isNewShow && <NewShowBadge />}
                                                     {isPremiere(release) && <FirstEpisodeBadge />}
-                                                    {release.show && <AnimeLinkIndicator show={release.show} currentEpisode={latestEpisodeNumber(release)} />}
+                                                    {release.show && (
+                                                        <AnimeLinkIndicator show={release.show} currentEpisode={latestEpisodeNumber(release)} />
+                                                    )}
                                                 </>
                                             ) : undefined
                                         }

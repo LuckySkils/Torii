@@ -7,6 +7,7 @@ import { GenreChips } from '@/components/subtracker/facet-filters';
 import { ActionHint, ColumnHint } from '@/components/subtracker/hint';
 import { LatestEpisodeLabel } from '@/components/subtracker/latest-episode-label';
 import { MatchesDialog } from '@/components/subtracker/matches-dialog';
+import { NyaaImportButton } from '@/components/subtracker/nyaa-import-dialog';
 import { PosterHoverPreview } from '@/components/subtracker/poster-hover-preview';
 import { RelativeTime } from '@/components/subtracker/relative-time';
 import { RuleBadge } from '@/components/subtracker/rule-badge';
@@ -99,7 +100,15 @@ export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndex
             <Head title="Shows" />
             <div className={`flex h-full flex-1 flex-col gap-4 p-3 sm:p-4 ${bulkBarVisible ? 'pb-24 sm:pb-4' : ''}`}>
                 <div className="flex flex-wrap items-center justify-between gap-2 sm:flex-nowrap sm:items-start">
-                    <ShowsToolbar filters={nav.filters} options={filterOptions} nav={nav} view={view} onViewChange={setView} />
+                    <ShowsToolbar
+                        filters={nav.filters}
+                        options={filterOptions}
+                        nav={nav}
+                        view={view}
+                        onViewChange={setView}
+                        phoneActions={<NyaaImportButton label="Import" />}
+                    />
+                    <NyaaImportButton className="hidden shrink-0 sm:inline-flex" />
                     <ToggleGroup
                         type="single"
                         value={view}

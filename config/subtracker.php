@@ -38,6 +38,25 @@ return [
         ],
     ],
 
+    // Import from a Nyaa RSS link (§16).
+    'nyaa' => [
+        // Announce URLs added to every magnet built from a Nyaa item, in this order.
+        'trackers' => array_values(array_filter(array_map('trim', explode(',', (string) env('NYAA_TRACKERS', ''))))) ?: [
+            'http://nyaa.tracker.wf:7777/announce',
+            'udp://open.stealth.si:80/announce',
+            'udp://tracker.opentrackr.org:1337/announce',
+            'udp://exodus.desync.com:6969/announce',
+            'udp://tracker.torrent.eu.org:451/announce',
+        ],
+        'timeout_seconds' => 15,
+        // A full Nyaa RSS page is about 75 items, well under 1 MB.
+        'max_bytes' => 4 * 1024 * 1024,
+        // Nyaa returns one page; a feed this long may have been cut off.
+        'full_page_items' => 75,
+        'preview_ttl_minutes' => 15,
+        'previews_per_minute' => 10,
+    ],
+
     // MCP server (§15). Off by default; with MCP_PORT set it gets its own listener.
     'mcp' => [
         'enabled' => filter_var(env('MCP_ENABLED', false), FILTER_VALIDATE_BOOL),
