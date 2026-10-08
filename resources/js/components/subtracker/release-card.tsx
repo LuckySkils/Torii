@@ -20,6 +20,8 @@ interface ReleaseCardProps {
     episode?: ReactNode;
     /** Small badges shown after the show name / episode line. */
     badges?: ReactNode;
+    /** Extra controls at the end of the button row (the dashboard's Track switch). */
+    actions?: ReactNode;
 }
 
 function episodeLabel(release: ReleaseSummary | DashboardRelease): string {
@@ -43,7 +45,7 @@ async function copyLink(link: string) {
     }
 }
 
-export function ReleaseCard({ release, showLink = false, poster, episode, badges }: ReleaseCardProps) {
+export function ReleaseCard({ release, showLink = false, poster, episode, badges, actions }: ReleaseCardProps) {
     const canDownload = release.downloadedAt === null && release.dispatchStatus !== 'sent' && release.dispatchStatus !== 'exists';
 
     const details = (
@@ -118,6 +120,7 @@ export function ReleaseCard({ release, showLink = false, poster, episode, badges
                     <Copy className="size-3.5" />
                     Copy link
                 </Button>
+                {actions && <div className="ml-auto flex items-center">{actions}</div>}
             </div>
         </div>
     );

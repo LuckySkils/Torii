@@ -59,6 +59,15 @@ function load(id: number, signal: AbortSignal): Promise<AnimeCardData> {
     return shared.promise;
 }
 
+/** Keeps a cached card in step with a change made from it (e.g. tracking its linked show). */
+export function patchCachedCard(id: number, patch: (card: AnimeCardData) => AnimeCardData) {
+    const card = cache.get(id);
+
+    if (card) {
+        cache.set(id, patch(card));
+    }
+}
+
 type CardState = { status: 'idle' } | { status: 'loading' } | { status: 'ready'; data: AnimeCardData } | { status: 'error'; message: string };
 
 /**

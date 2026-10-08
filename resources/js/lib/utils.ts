@@ -11,9 +11,12 @@ export function cn(...inputs: ClassValue[]) {
  * for the control's current size; each is tuned so neighbouring controls' expanded areas meet
  * without overlapping, given the gap they actually sit in.
  */
-export const TOUCH_TARGET_XS = "relative [@media(hover:none)]:after:absolute [@media(hover:none)]:after:-inset-0.5 [@media(hover:none)]:after:content-['']";
-export const TOUCH_TARGET_SM = "relative [@media(hover:none)]:after:absolute [@media(hover:none)]:after:-inset-1 [@media(hover:none)]:after:content-['']";
-export const TOUCH_TARGET_MD = "relative [@media(hover:none)]:after:absolute [@media(hover:none)]:after:-inset-1.5 [@media(hover:none)]:after:content-['']";
+export const TOUCH_TARGET_XS =
+    "relative [@media(hover:none)]:after:absolute [@media(hover:none)]:after:-inset-0.5 [@media(hover:none)]:after:content-['']";
+export const TOUCH_TARGET_SM =
+    "relative [@media(hover:none)]:after:absolute [@media(hover:none)]:after:-inset-1 [@media(hover:none)]:after:content-['']";
+export const TOUCH_TARGET_MD =
+    "relative [@media(hover:none)]:after:absolute [@media(hover:none)]:after:-inset-1.5 [@media(hover:none)]:after:content-['']";
 export const TOUCH_TARGET_SWITCH =
     "relative [@media(hover:none)]:after:absolute [@media(hover:none)]:after:-inset-y-2.5 [@media(hover:none)]:after:inset-x-0 [@media(hover:none)]:after:content-['']";
 
@@ -24,3 +27,10 @@ export const TOUCH_TARGET_SWITCH =
  */
 export const POSTER_GRID =
     'grid gap-3 sm:gap-4 [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))] sm:[grid-template-columns:repeat(auto-fill,minmax(180px,1fr))] lg:[grid-template-columns:repeat(auto-fill,minmax(200px,1fr))] large:md:gap-5 large:md:[grid-template-columns:repeat(auto-fill,minmax(240px,1fr))] large:xl:[grid-template-columns:repeat(auto-fill,minmax(270px,1fr))] large:3xl:[grid-template-columns:repeat(auto-fill,minmax(320px,1fr))]';
+
+/**
+ * List-entry covers (schedule entries, the dashboard's latest releases): 72px wide,
+ * about 4-6 text lines tall, on every screen; 96px in large density. The Week
+ * board's column minimum is derived from it.
+ */
+export const ENTRY_COVER = 'w-[72px] large:md:w-24';

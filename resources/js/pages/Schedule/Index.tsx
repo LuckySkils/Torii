@@ -91,7 +91,11 @@ export default function ScheduleIndex({ airings, filters, filterOptions }: Sched
 
                       return { ...filters, ...restored, ...rangeFor(restored.view, new Date()) };
                   })()
-                : { ...filters, view, ...(urlKeys.has('from') && urlKeys.has('to') ? { from: filters.from, to: filters.to } : rangeFor(view, new Date())) };
+                : {
+                      ...filters,
+                      view,
+                      ...(urlKeys.has('from') && urlKeys.has('to') ? { from: filters.from, to: filters.to } : rangeFor(view, new Date())),
+                  };
 
         // One tick later: on first load this effect runs before Inertia's own App effect
         // has initialised the router, and a visit started now would throw.
@@ -338,7 +342,9 @@ function WeekView({ days, now, isCurrent, filtered, mineOnly, onShift, onThisWee
                     </EmptyState>
                 )
             ) : (
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 large:md:gap-4">
+                // As many day columns as fit (up to the 7 days), each at least wide enough for the
+                // 72px cover (96px in large) plus a readable title: fewer columns, never a smaller cover.
+                <div className="grid [grid-template-columns:repeat(auto-fit,minmax(224px,1fr))] gap-3 large:md:[grid-template-columns:repeat(auto-fit,minmax(270px,1fr))] large:md:gap-4">
                     {days.map(({ day, airings }) => (
                         <DayColumn key={localDayKey(day)} day={day} airings={airings} now={now} />
                     ))}

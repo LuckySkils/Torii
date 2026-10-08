@@ -141,7 +141,7 @@ test('latest releases are ordered by published_at desc, then first_seen_at desc'
         ->where('latestReleases.3.title', 'OLD-BATCH'));
 });
 
-test('latest releases carry poster, batch, first-episode and new-show fields', function () {
+test('latest releases carry poster, batch, first-episode, new-show and tracked fields', function () {
     qbitUnreachable();
     $this->travelTo('2026-09-24 12:00:00');
 
@@ -158,7 +158,7 @@ test('latest releases carry poster, batch, first-episode and new-show fields', f
     dashboardRelease($newShow, 'EP01', ['episode' => '01', 'published_at' => now()->subHours(10)]);
     dashboardRelease($newShow, 'EP02', ['episode' => '02', 'published_at' => now()->subHours(9)]);
 
-    $oldShow = dashboardShow('Old Show');
+    $oldShow = dashboardShow('Old Show', ['is_tracked' => true]);
     dashboardRelease($oldShow, 'EARLIEST', ['episode' => '07', 'published_at' => now()->subHours(8)]);
     dashboardRelease($oldShow, 'BATCH', ['episode' => null, 'is_batch' => true, 'batch_from' => 1, 'batch_to' => 12, 'published_at' => now()->subHours(7)]);
 
@@ -171,12 +171,14 @@ test('latest releases carry poster, batch, first-episode and new-show fields', f
         ->where('latestReleases.0.isNewShow', false)
         ->where('latestReleases.0.show.imageUrl', null)
         ->where('latestReleases.0.show.imageStatus', 'none')
+        ->where('latestReleases.0.show.isTracked', true)
         ->where('latestReleases.1.title', 'EARLIEST')
         ->where('latestReleases.1.isFirstEpisode', true)
         ->where('latestReleases.2.title', 'EP02')
         ->where('latestReleases.2.isFirstEpisode', false)
         ->where('latestReleases.2.isNewShow', true)
         ->where('latestReleases.2.show.imageStatus', 'found')
+        ->where('latestReleases.2.show.isTracked', false)
         ->where('latestReleases.2.show.imageUrl', "/shows/{$newShow->id}/image?v=".substr(hash('sha256', 'bytes'), 0, 8))
         ->where('latestReleases.3.title', 'EP01')
         ->where('latestReleases.3.isFirstEpisode', true)

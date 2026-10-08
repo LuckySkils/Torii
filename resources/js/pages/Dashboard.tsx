@@ -4,6 +4,7 @@ import { LatestReleasesTable, ReleaseEpisode, ReleaseThumb } from '@/components/
 import { FirstEpisodeBadge, isPremiere, NewShowBadge } from '@/components/subtracker/novelty-badges';
 import { NyaaImportButton } from '@/components/subtracker/nyaa-import-dialog';
 import { ReleaseCard } from '@/components/subtracker/release-card';
+import { TrackSwitch } from '@/components/subtracker/track-switch';
 import { useAdaptivePoll } from '@/hooks/use-adaptive-poll';
 import AppLayout from '@/layouts/app-layout';
 import { latestEpisodeNumber } from '@/lib/anime';
@@ -51,6 +52,18 @@ export default function Dashboard({ health, latestReleases }: DashboardProps) {
                                                     )}
                                                 </>
                                             ) : undefined
+                                        }
+                                        actions={
+                                            release.show && (
+                                                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                    Track
+                                                    <TrackSwitch
+                                                        showId={release.show.id}
+                                                        showName={release.show.name}
+                                                        tracked={release.show.isTracked}
+                                                    />
+                                                </label>
+                                            )
                                         }
                                     />
                                 ))}

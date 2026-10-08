@@ -4,7 +4,7 @@ import { AnimeFacts, GenreBadges, NextEpisodeLine } from '@/components/subtracke
 import { ColumnHint } from '@/components/subtracker/hint';
 import { RelativeTime } from '@/components/subtracker/relative-time';
 import { ShowPoster } from '@/components/subtracker/show-poster';
-import { Badge } from '@/components/ui/badge';
+import { TrackSwitch } from '@/components/subtracker/track-switch';
 import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/app-layout';
 import { animeSubtitle, animeTitle, coverPoster } from '@/lib/anime';
@@ -81,34 +81,34 @@ export default function AnimeShow({ anime, airings, linkedShows }: AnimeShowProp
                 <section className="flex flex-col gap-2">
                     <h2 className="text-lg font-medium">Linked shows</h2>
                     {linkedShows.length === 0 ? (
-                        <p className="rounded-xl border p-4 text-sm text-muted-foreground">Not linked to any show.</p>
+                        <p className="text-sm text-muted-foreground">Not linked to a SubsPlease show.</p>
                     ) : (
                         <div className="flex flex-col gap-2">
                             {linkedShows.map((show) => (
-                                <Link
-                                    key={show.id}
-                                    href={`/shows/${show.id}`}
-                                    className="flex items-center gap-3 rounded-xl border p-2 hover:bg-muted/50"
-                                >
-                                    <ShowPoster
-                                        imageUrl={show.imageUrl}
-                                        imageStatus={show.imageUrl ? 'found' : 'none'}
-                                        name={show.name}
-                                        className="w-10"
-                                    />
-                                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                                        <span className="text-sm font-medium break-words">{show.name}</span>
-                                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                                            <Link2 className={cn('size-3', show.linkSource === 'manual' && 'text-sky-600 dark:text-sky-400')} />
-                                            {show.linkSource === 'manual' ? 'linked manually' : `linked automatically (score ${show.confidence})`}
-                                            {' · '}
-                                            <RelativeTime iso={show.linkedAt} />
-                                        </span>
-                                    </div>
-                                    {show.isTracked && (
-                                        <Badge className="shrink-0 border-transparent bg-green-600 text-white hover:bg-green-600/90">tracked</Badge>
-                                    )}
-                                </Link>
+                                <div key={show.id} className="flex items-center gap-3 rounded-xl border p-2 pr-3">
+                                    <Link href={`/shows/${show.id}`} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg hover:bg-muted/50">
+                                        <ShowPoster
+                                            imageUrl={show.imageUrl}
+                                            imageStatus={show.imageUrl ? 'found' : 'none'}
+                                            name={show.name}
+                                            className="w-10"
+                                        />
+                                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                                            <span className="text-sm font-medium break-words">{show.name}</span>
+                                            <span className="inline-flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+                                                <Link2 className={cn('size-3', show.linkSource === 'manual' && 'text-sky-600 dark:text-sky-400')} />
+                                                {show.linkSource === 'manual' ? 'linked manually' : `linked automatically (score ${show.confidence})`}
+                                                {' · '}
+                                                <RelativeTime iso={show.linkedAt} />
+                                            </span>
+                                        </div>
+                                    </Link>
+                                    {/* Outside the link: toggling must not open the show. Same switch and confirm as everywhere else. */}
+                                    <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                                        <span className="hidden sm:inline">{show.isTracked ? 'Tracked' : 'Track'}</span>
+                                        <TrackSwitch showId={show.id} showName={show.name} tracked={show.isTracked} withHint />
+                                    </label>
+                                </div>
                             ))}
                         </div>
                     )}

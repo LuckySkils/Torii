@@ -3,6 +3,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { latestEpisodeNumber, posterFor } from '@/lib/anime';
 import { formatDelay } from '@/lib/dates';
 import { COLUMN_HINTS } from '@/lib/hints';
+import { ENTRY_COVER } from '@/lib/utils';
 import { type DashboardRelease } from '@/types/subtracker';
 import { Link } from '@inertiajs/react';
 import { type ReactNode } from 'react';
@@ -17,6 +18,7 @@ import { FirstEpisodeBadge, isPremiere, NewShowBadge } from './novelty-badges';
 import { PosterHoverPreview } from './poster-hover-preview';
 import { RelativeTime } from './relative-time';
 import { ShowPoster } from './show-poster';
+import { TrackSwitch } from './track-switch';
 
 interface LatestReleasesTableProps {
     releases: DashboardRelease[];
@@ -95,7 +97,7 @@ export function LatestReleasesTable({ releases }: LatestReleasesTableProps) {
             <Table>
                 <TableHeader>
                     <TableRow>
-                        <TableHead className="w-14">
+                        <TableHead className="w-24 large:md:w-28">
                             <span className="sr-only">Poster</span>
                         </TableHead>
                         <TableHead>Show</TableHead>
@@ -111,6 +113,9 @@ export function LatestReleasesTable({ releases }: LatestReleasesTableProps) {
                             <ColumnHint label="Delay">{COLUMN_HINTS.delay}</ColumnHint>
                         </TableHead>
                         <TableHead>
+                            <ColumnHint label="Track">{COLUMN_HINTS.track}</ColumnHint>
+                        </TableHead>
+                        <TableHead>
                             <ColumnHint label="Status">{COLUMN_HINTS.status}</ColumnHint>
                         </TableHead>
                         <TableHead className="w-20" />
@@ -120,9 +125,9 @@ export function LatestReleasesTable({ releases }: LatestReleasesTableProps) {
                     {releases.map((release) => (
                         <TableRow key={release.id}>
                             <TableCell className="py-2">
-                                <ReleaseThumb release={release} preview />
+                                <ReleaseThumb release={release} className={ENTRY_COVER} preview />
                             </TableCell>
-                            <TableCell className="max-w-56">
+                            <TableCell className="max-w-44 2xl:max-w-56">
                                 {release.show ? (
                                     <div className="flex flex-col items-start gap-1">
                                         <Link href={`/shows/${release.show.id}`} className="line-clamp-2 font-medium hover:underline">
@@ -143,7 +148,10 @@ export function LatestReleasesTable({ releases }: LatestReleasesTableProps) {
                                     {isPremiere(release) && <FirstEpisodeBadge />}
                                 </div>
                             </TableCell>
-                            <TableCell className="max-w-xs truncate text-muted-foreground" title={release.title}>
+                            <TableCell
+                                className="max-w-48 truncate text-muted-foreground 2xl:max-w-sm large:md:max-w-40 large:2xl:max-w-sm"
+                                title={release.title}
+                            >
                                 <a href={release.link} className="hover:underline">
                                     {release.title}
                                 </a>
@@ -155,6 +163,13 @@ export function LatestReleasesTable({ releases }: LatestReleasesTableProps) {
                                 <RelativeTime iso={release.firstSeenAt} />
                             </TableCell>
                             <TableCell className="whitespace-nowrap">{formatDelay(release.publishedAt, release.firstSeenAt)}</TableCell>
+                            <TableCell>
+                                {release.show ? (
+                                    <TrackSwitch showId={release.show.id} showName={release.show.name} tracked={release.show.isTracked} />
+                                ) : (
+                                    <span className="text-sm text-muted-foreground">—</span>
+                                )}
+                            </TableCell>
                             <TableCell>
                                 <DispatchBadge
                                     status={release.dispatchStatus}

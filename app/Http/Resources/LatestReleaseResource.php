@@ -36,6 +36,7 @@ final class LatestReleaseResource extends JsonResource
                 'name' => $show->name,
                 'imageUrl' => $show->image?->url(),
                 'imageStatus' => $show->image_status->value,
+                'isTracked' => $show->is_tracked,
                 'anime' => LinkedAnimeResource::summaryFor($show->animeLink),
                 'hasSuggestions' => (bool) ($show->anime_suggestions_exists ?? $show->animeSuggestions()->exists()),
             ],

@@ -1,7 +1,7 @@
 import { coverPoster, formatLabel } from '@/lib/anime';
 import { SCHEDULE_HINTS } from '@/lib/hints';
 import { scheduleTitle, timeOfDay } from '@/lib/schedule';
-import { cn } from '@/lib/utils';
+import { cn, ENTRY_COVER } from '@/lib/utils';
 import { type ScheduleAiring } from '@/types/subtracker';
 import { Link } from '@inertiajs/react';
 import { Check, Link2 } from 'lucide-react';
@@ -86,16 +86,16 @@ interface EntryProps {
     past: boolean;
 }
 
-/** Week board card: time · episode, cover, two-line title, badges. Kept to about three lines. */
+/** Week board card: cover on the left, the time, a two-line title and badges beside it; its height follows the cover. */
 export function ScheduleCard({ airing, past }: EntryProps) {
     const title = scheduleTitle(airing.anime);
 
     return (
         <AnimeDetailCard animeId={airing.anime.id} badges={<ScheduleBadges airing={airing} />}>
-            <li className={cn('flex gap-2 rounded-lg border bg-card p-1.5 large:md:gap-2.5 large:md:p-2', past && 'opacity-55')}>
-                <EntryCover airing={airing} title={title} className="w-8 large:md:w-12" />
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="text-[11px] text-muted-foreground tabular-nums large:md:text-xs">
+            <li className={cn('flex items-start gap-2.5 rounded-lg border bg-card p-2 large:md:gap-3 large:md:p-2.5', past && 'opacity-55')}>
+                <EntryCover airing={airing} title={title} className={ENTRY_COVER} />
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <span className="text-xs text-muted-foreground tabular-nums large:md:text-sm">
                         <time dateTime={airing.airsAt} className="font-medium text-foreground">
                             {timeOfDay.format(new Date(airing.airsAt))}
                         </time>{' '}
@@ -103,7 +103,7 @@ export function ScheduleCard({ airing, past }: EntryProps) {
                     </span>
                     <Link
                         href={`/anime/${airing.anime.id}`}
-                        className="line-clamp-2 text-xs leading-tight font-medium break-words hover:underline large:md:text-sm"
+                        className="line-clamp-2 text-sm leading-snug font-medium break-words hover:underline large:md:text-base"
                     >
                         {title}
                     </Link>
@@ -114,24 +114,25 @@ export function ScheduleCard({ airing, past }: EntryProps) {
     );
 }
 
-/** Today list row: led by its local time, a bigger cover and a one-line title. */
+/** Today list row: led by its local time, then the cover and the title, episode and badges beside it. */
 export function ScheduleRow({ airing, past }: EntryProps) {
     const title = scheduleTitle(airing.anime);
 
     return (
         <AnimeDetailCard animeId={airing.anime.id} badges={<ScheduleBadges airing={airing} />}>
-            <li className={cn('flex items-center gap-3 px-3 py-2 large:md:gap-4 large:md:py-3', past && 'opacity-55')}>
-                <time dateTime={airing.airsAt} className="w-12 shrink-0 text-sm font-medium tabular-nums large:md:w-16 large:md:text-base">
+            <li className={cn('flex items-start gap-3 px-3 py-2.5 large:md:gap-4 large:md:py-3', past && 'opacity-55')}>
+                <time dateTime={airing.airsAt} className="w-12 shrink-0 pt-0.5 text-sm font-medium tabular-nums large:md:w-16 large:md:text-base">
                     {timeOfDay.format(new Date(airing.airsAt))}
                 </time>
-                <EntryCover airing={airing} title={title} className="w-10 large:md:w-14" />
+                <EntryCover airing={airing} title={title} className={ENTRY_COVER} />
                 <div className="flex min-w-0 flex-1 flex-col gap-1">
-                    <span className="flex min-w-0 items-baseline gap-2">
-                        <Link href={`/anime/${airing.anime.id}`} className="truncate text-sm font-medium hover:underline large:md:text-base">
-                            {title}
-                        </Link>
-                        <span className="shrink-0 text-xs text-muted-foreground tabular-nums large:md:text-sm">Ep {airing.episode}</span>
-                    </span>
+                    <Link
+                        href={`/anime/${airing.anime.id}`}
+                        className="line-clamp-2 text-sm leading-snug font-medium break-words hover:underline large:md:text-base"
+                    >
+                        {title}
+                    </Link>
+                    <span className="text-xs text-muted-foreground tabular-nums large:md:text-sm">Ep {airing.episode}</span>
                     <ScheduleBadges airing={airing} />
                 </div>
             </li>

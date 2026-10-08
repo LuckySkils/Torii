@@ -103,6 +103,7 @@ export interface DashboardRelease extends Omit<ReleaseSummary, 'show'> {
         | (ReleaseShowRef & {
               imageUrl: string | null;
               imageStatus: ImageStatus;
+              isTracked: boolean;
               anime: AnimeLinkSummary | null;
               hasSuggestions: boolean;
           })
