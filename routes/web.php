@@ -32,7 +32,9 @@ Route::post('deliveries/{delivery}/repair', [DeliveryController::class, 'repair'
 
 // Import from a Nyaa RSS link (§16). The preview fetches a user-supplied URL, hence the limit.
 Route::post('import/nyaa/preview', [NyaaImportController::class, 'preview'])->middleware('throttle:nyaa-import')->name('import.nyaa.preview');
+Route::post('import/nyaa/preview/{previewId}/target', [NyaaImportController::class, 'target'])->middleware('throttle:nyaa-retarget')->name('import.nyaa.target');
 Route::post('import/nyaa/confirm', [NyaaImportController::class, 'confirm'])->name('import.nyaa.confirm');
+Route::get('import/nyaa/shows', [NyaaImportController::class, 'shows'])->name('import.nyaa.shows');
 
 Route::get('shows/{show}/image', [ImageController::class, 'show'])->name('shows.image');
 Route::post('shows/{show}/image/refresh', [ImageController::class, 'refresh'])->name('shows.image.refresh');

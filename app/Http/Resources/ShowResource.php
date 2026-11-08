@@ -35,12 +35,17 @@ final class ShowResource extends JsonResource
             ...($this->fullAnime ? ['animeLink.anime.nextAiring'] : []),
         ]);
 
+        $trackability = $this->resource->trackability();
+
         return [
             'id' => $this->id,
             'name' => $this->name,
             'firstSeenAt' => $this->first_seen_at->toIso8601String(),
             'lastSeenAt' => $this->last_seen_at->toIso8601String(),
             'isTracked' => $this->is_tracked,
+            // §16: false when the show has no SubsPlease release (TrackShow refuses it).
+            'trackable' => $trackability['trackable'],
+            'trackBlockedReason' => $trackability['reason'],
             'trackingMode' => $this->tracking_mode?->value,
             'ruleState' => $this->rule_state->value,
             'ruleError' => $this->rule_error,

@@ -95,6 +95,8 @@ return [
         'full_page_items' => 75,
         'preview_ttl_minutes' => 15,
         'previews_per_minute' => 10,
+        // Retargeting a series only recomputes the cached preview (no external calls).
+        'retargets_per_minute' => 60,
     ],
 
     // MCP server (§15). Off by default; with MCP_PORT set it gets its own listener.

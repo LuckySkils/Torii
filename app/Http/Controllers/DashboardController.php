@@ -58,7 +58,7 @@ class DashboardController extends Controller
     {
         $releases = Release::query()
             ->with([
-                'show' => fn ($query) => $query->withExists('animeSuggestions'),
+                'show' => fn ($query) => $query->withExists('animeSuggestions')->withTrackability(),
                 'show.image' => fn ($query) => $query->select(['id', 'show_id', 'sha256']),
                 'show.animeLink.anime.image' => fn ($query) => $query->select(['id', 'anime_id', 'sha256', 'width', 'height']),
                 'delivery',

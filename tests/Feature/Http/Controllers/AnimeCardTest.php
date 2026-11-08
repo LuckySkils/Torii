@@ -59,7 +59,7 @@ test('the card has the full shape, with the linked show', function () {
         'isAdult' => false,
         'siteUrl' => 'https://anilist.co/anime/199111',
         // A tracked one first, as on the schedule rows.
-        'linkedShow' => ['id' => $tracked->id, 'name' => 'B Tracked', 'isTracked' => true],
+        'linkedShow' => ['id' => $tracked->id, 'name' => 'B Tracked', 'isTracked' => true, 'trackable' => true, 'trackBlockedReason' => null],
     ]);
 });
 

@@ -19,10 +19,12 @@ use Illuminate\Validation\ValidationException;
 use Throwable;
 
 /**
- * Confirms a Nyaa import preview (§16): the chosen items become releases of the
- * show their title names (the existing show with that exact name, or a new
- * untracked one, which then gets matching and a poster like any discovered
- * show), sourced `nyaa`, with the magnet as their link. Then they go to
+ * Confirms a Nyaa import preview (§16): the chosen items become releases of
+ * their series' target show (the existing show chosen in the preview, or a new
+ * untracked one with the target's name, which then gets matching and a poster
+ * like any discovered show), sourced `nyaa`, with the parsed group and the
+ * magnet as their link. An episode the target show got meanwhile (another
+ * group's, downloaded or sent) is skipped: the preview is a snapshot. Then they go to
  * qBittorrent through QueueReleases, so its duplicate check, throttling and
  * error handling apply. Never creates a rule, never tracks a show, and doesn't
  * fire NewReleaseDetected (these aren't new episodes: no notifications, no
@@ -47,7 +49,7 @@ final class NyaaImporter
 
         if ($preview === null) {
             throw ValidationException::withMessages([
-                'previewId' => 'This preview has expired or was already used (previews last '.config('subtracker.nyaa.preview_ttl_minutes').' minutes). Preview the link again.',
+                'previewId' => NyaaImportPreviews::expiredMessage(),
             ]);
         }
 
@@ -63,12 +65,18 @@ final class NyaaImporter
 
         $releaseIds = $skipped = $errors = [];
         $shows = [];
+        $targets = array_column($preview['series'], 'target', 'key');
+        $held = HeldEpisodes::forShows(array_values(array_filter(array_map(
+            fn (array $target) => $target['kind'] === 'existing' ? $target['showId'] : null,
+            $targets,
+        ))));
 
         foreach (array_unique($keys) as $key) {
             $item = $items[$key];
+            $target = $item['seriesKey'] === null ? null : ($targets[$item['seriesKey']] ?? null);
 
             try {
-                $result = $this->release($item, $shows);
+                $result = $this->release($item, $target, $held, $shows);
             } catch (Throwable $e) {
                 logger()->error('Nyaa import: could not store an item', ['title' => $item['title'], 'error' => $e->getMessage()]);
                 $errors[] = ['key' => $key, 'title' => $item['title'], 'message' => 'Could not be stored: '.$e->getMessage()];
@@ -119,9 +127,10 @@ final class NyaaImporter
      * the same torrent, or an earlier import) rather than adding a duplicate.
      *
      * @param  array<string, mixed>  $item
-     * @param  array<string, array{show: Show, created: bool}>  $shows  by name, filled as shows are found or created
+     * @param  array<string, mixed>|null  $target  the item's series target; null for an unparsed item (no show)
+     * @param  array<string, array{show: Show, created: bool}>  $shows  by id or name, filled as shows are found or created
      */
-    private function release(array $item, array &$shows): Release|string
+    private function release(array $item, ?array $target, HeldEpisodes $held, array &$shows): Release|string
     {
         $existing = Release::query()
             ->when($item['infohash'] !== null, fn ($q) => $q->where('infohash', $item['infohash']), fn ($q) => $q->where('guid', $item['viewUrl']))
@@ -141,10 +150,24 @@ final class NyaaImporter
         }
 
         $show = null;
+        $entryKey = null;
 
-        if ($item['showName'] !== null) {
-            $shows[$item['showName']] ??= $this->show($item['showName']);
-            $show = $shows[$item['showName']]['show'];
+        if ($target !== null) {
+            $entryKey = $target['kind'] === 'existing' ? 'id:'.$target['showId'] : 'name:'.$target['name'];
+            $shows[$entryKey] ??= $target['kind'] === 'existing' ? $this->existingShow((int) $target['showId']) : $this->show((string) $target['name']);
+            $show = $shows[$entryKey]['show'];
+
+            // The preview is a snapshot: the target may have got this episode since (another group's,
+            // downloaded or sent). An item the preview already marked so was ticked deliberately.
+            if (! $item['isBatch'] && $item['state'] !== 'have_episode' && ! $shows[$entryKey]['created']) {
+                $have = $target['kind'] === 'existing'
+                    ? $held->reasonFor($show->id, $item['episode'])
+                    : HeldEpisodes::forShows([$show->id])->reasonFor($show->id, $item['episode']);
+
+                if ($have !== null) {
+                    return $have;
+                }
+            }
         }
 
         $publishedAt = $item['publishedAt'] !== null ? CarbonImmutable::parse($item['publishedAt']) : now();
@@ -169,9 +192,10 @@ final class NyaaImporter
             'published_at_raw' => $item['publishedAtRaw'] ?? null,
             'first_seen_at' => now(),
             'source' => ReleaseSource::Nyaa,
+            'release_group' => $item['group'] === null ? null : mb_substr((string) $item['group'], 0, 255),
         ]);
 
-        if ($shows[$item['showName'] ?? '']['created'] ?? false) {
+        if ($entryKey !== null && $shows[$entryKey]['created']) {
             $this->bumpLatestEpisode($show, $item);
         }
 
@@ -179,7 +203,22 @@ final class NyaaImporter
     }
 
     /**
-     * The existing show with exactly this SubsPlease name, or a new untracked one.
+     * The show chosen in the preview.
+     *
+     * @return array{show: Show, created: bool}
+     *
+     * @throws \RuntimeException when it was deleted since
+     */
+    private function existingShow(int $showId): array
+    {
+        $show = Show::find($showId) ?? throw new \RuntimeException("the chosen show (id {$showId}) no longer exists; preview the link again");
+
+        return ['show' => $show, 'created' => false];
+    }
+
+    /**
+     * The existing show with exactly this name (one created earlier in this
+     * confirm, or since the preview), or a new untracked one.
      *
      * @return array{show: Show, created: bool}
      */

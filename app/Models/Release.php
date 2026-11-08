@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Enums\DispatchStatus;
 use App\Enums\ReleaseSource;
+use App\Services\Releases\ReleaseTitleParser;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -35,6 +36,7 @@ class Release extends Model
         'downloaded_at',
         'source',
         'torrent_url',
+        'release_group',
     ];
 
     protected function casts(): array
@@ -51,6 +53,29 @@ class Release extends Model
             'downloaded_at' => 'datetime',
             'source' => ReleaseSource::class,
         ];
+    }
+
+    /**
+     * The group that made it: `release_group`, or SubsPlease for a feed release
+     * stored without one (every feed release is SubsPlease's).
+     */
+    public function effectiveGroup(): ?string
+    {
+        return $this->release_group
+            ?? ($this->source === null || $this->source === ReleaseSource::SubsPleaseRss ? ReleaseTitleParser::SUBSPLEASE : null);
+    }
+
+    /**
+     * An episode number for comparing across groups: numeric ones compare by
+     * value ("6" = "06", "12.5"), anything else as written; null stays null.
+     */
+    public static function episodeKey(?string $episode): ?string
+    {
+        if ($episode === null) {
+            return null;
+        }
+
+        return is_numeric($episode) ? (string) (float) $episode : $episode;
     }
 
     public function show(): BelongsTo

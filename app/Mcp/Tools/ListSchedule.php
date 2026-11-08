@@ -47,6 +47,8 @@ final class ListSchedule extends ToriiTool
             // Cover URLs point at the UI, which the MCP listener doesn't serve.
             'airings' => array_map(function (array $row): array {
                 unset($row['anime']['coverUrl'], $row['anime']['coverWidth'], $row['anime']['coverHeight']);
+                // The track switch's fields (§16) stay in the UI; list_shows/get_show carry `trackable`.
+                unset($row['show']['trackable'], $row['show']['trackBlockedReason']);
 
                 return $row;
             }, $airings['rows']),

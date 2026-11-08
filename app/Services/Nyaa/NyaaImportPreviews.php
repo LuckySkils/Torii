@@ -6,33 +6,44 @@ namespace App\Services\Nyaa;
 
 use App\Enums\DispatchStatus;
 use App\Models\Release;
-use App\Models\Show;
-use App\Services\Feed\SubsPleaseTitleParser;
+use App\Services\Metadata\Matching\TitleNormalizer;
 use App\Services\QBittorrent\QBittorrentClient;
+use App\Services\Releases\ReleaseTitleParser;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 /**
  * Builds and stores the preview of a Nyaa RSS link (§16): every item, parsed
- * with the SubsPlease title parser, given a state and a suggested selection.
- * The preview is a snapshot kept server-side for a few minutes, so confirming
- * adds exactly what was shown, never a re-fetch.
+ * with the general release title parser, grouped into series, each series with
+ * a target show (suggested, then chosen by the user) and every item with a state
+ * and a suggested selection. The preview is a snapshot kept server-side for a
+ * few minutes, so confirming adds exactly what was shown, never a re-fetch.
  *
- * States, in order of precedence: `unparsed` (not a SubsPlease title),
- * `in_qbit` (qBittorrent already has the infohash), `known_release` (Torii has
- * already sent or downloaded it), `superseded` (a higher version of the same
- * episode is in the list), otherwise `new`. Remakes and episodes covered by a
- * batch in the list stay `new` but unselected, with the reason.
+ * States, in order of precedence: `unparsed`, `in_qbit` (qBittorrent already has
+ * the infohash), `known_release` (Torii has already sent or downloaded it),
+ * `have_episode` (the target show already has that episode from any group),
+ * `superseded` (a higher version from the same group is in the list),
+ * `duplicate_episode` (the same episode from another group is in the list and
+ * kept instead), otherwise `new`. Remakes and episodes covered by a batch of the
+ * series stay `new` but unselected, with the reason. States depend on the
+ * target, so they're recomputed on every retarget.
  */
 final class NyaaImportPreviews
 {
     private const CACHE_PREFIX = 'nyaa-import:preview:';
 
+    /** Stored with each item, never sent to the browser. */
+    private const INTERNAL_ITEM_FIELDS = ['publishedAtRaw', 'crc', 'altTitles', 'inQbit', 'known'];
+
     public function __construct(
         private readonly NyaaClient $client,
         private readonly NyaaFeedParser $parser,
-        private readonly SubsPleaseTitleParser $titles,
+        private readonly ReleaseTitleParser $titles,
+        private readonly TitleNormalizer $normalizer,
+        private readonly SeriesTargets $targets,
         private readonly QBittorrentClient $qbit,
     ) {}
 
@@ -56,14 +67,19 @@ final class NyaaImportPreviews
 
         $inQbit = $this->hashesInQbit($items, $warnings);
         $known = $this->knownReleases($items);
-        $items = $this->assignStates($items, $inQbit, $known);
 
-        $names = array_values(array_unique(array_filter(array_column($items, 'showName'))));
-        if (count($names) > 1) {
-            $warnings[] = 'This feed holds releases of '.count($names).' shows ('.implode(', ', array_slice($names, 0, 5)).(count($names) > 5 ? ', …' : '').'); each item is added to the show it names.';
+        foreach ($items as $key => $item) {
+            $release = $known[$item['infohash'] ?? ''] ?? $known[$item['viewUrl']] ?? null;
+            $items[$key]['inQbit'] = $item['infohash'] !== null && isset($inQbit[$item['infohash']]);
+            $items[$key]['known'] = match (true) {
+                $release === null => null,
+                $release->downloaded_at !== null => 'downloaded',
+                in_array($release->dispatch_status, [DispatchStatus::Sent, DispatchStatus::Exists], true) => 'sent',
+                default => null,
+            };
         }
 
-        $existingShowId = count($names) === 1 ? Show::where('name', $names[0])->value('id') : null;
+        $series = $this->targets->describe($this->series($items));
         $ttl = (int) config('subtracker.nyaa.preview_ttl_minutes');
 
         $preview = [
@@ -71,16 +87,49 @@ final class NyaaImportPreviews
             'expiresAt' => now()->addMinutes($ttl)->toIso8601String(),
             'feedTitle' => $feed['title'],
             'truncated' => count($feed['items']) >= (int) config('subtracker.nyaa.full_page_items'),
-            'items' => array_values($this->sorted($items)),
-            'show' => count($names) === 1 ? [
-                'existingShowId' => $existingShowId,
-                'name' => $names[0],
-                'willCreate' => $existingShowId === null,
-            ] : null,
+            'items' => array_values($items),
+            'series' => array_values($series),
             'warnings' => $warnings,
         ];
 
+        $preview = $this->withStates($preview);
+
         Cache::put(self::CACHE_PREFIX.$preview['previewId'], $preview, now()->addMinutes($ttl));
+
+        return $preview;
+    }
+
+    /**
+     * Points one series at another show (an existing one, or a new name) and
+     * recomputes the states. A new name that some show has exactly becomes that
+     * show.
+     *
+     * @return array<string, mixed> the updated stored preview
+     *
+     * @throws ValidationException for an unknown preview, series or show, or a bad name
+     */
+    public function retarget(string $previewId, string $seriesKey, ?int $showId, ?string $newName): array
+    {
+        $preview = $this->find($previewId);
+
+        if ($preview === null) {
+            throw ValidationException::withMessages(['previewId' => self::expiredMessage()]);
+        }
+
+        $index = array_search($seriesKey, array_column($preview['series'], 'key'), true);
+
+        if ($index === false) {
+            throw ValidationException::withMessages(['seriesKey' => "This preview has no series \"{$seriesKey}\"."]);
+        }
+
+        $preview['series'][$index]['target'] = $this->targets->chosen($showId, $newName, $preview['series'][$index]['groups']);
+        $preview = $this->withStates($preview);
+
+        $expiresAt = CarbonImmutable::parse($preview['expiresAt']);
+
+        if ($expiresAt->isFuture()) {
+            Cache::put(self::CACHE_PREFIX.$previewId, $preview, $expiresAt);
+        }
 
         return $preview;
     }
@@ -92,7 +141,8 @@ final class NyaaImportPreviews
     {
         $preview = Cache::get(self::CACHE_PREFIX.$previewId);
 
-        return is_array($preview) ? $preview : null;
+        // A preview cached before series existed can't be confirmed: it counts as expired.
+        return is_array($preview) && isset($preview['series']) ? $preview : null;
     }
 
     public function forget(string $previewId): void
@@ -100,8 +150,13 @@ final class NyaaImportPreviews
         Cache::forget(self::CACHE_PREFIX.$previewId);
     }
 
+    public static function expiredMessage(): string
+    {
+        return 'This preview has expired or was already used (previews last '.config('subtracker.nyaa.preview_ttl_minutes').' minutes). Preview the link again.';
+    }
+
     /**
-     * What the preview endpoint returns: the stored preview without internals.
+     * What the preview endpoints return: the stored preview without internals.
      *
      * @param  array<string, mixed>  $preview
      * @return array<string, mixed>
@@ -110,8 +165,20 @@ final class NyaaImportPreviews
     {
         return [
             ...$preview,
-            'items' => array_map(fn (array $item) => array_diff_key($item, ['publishedAtRaw' => true, 'crc' => true]), $preview['items']),
+            'items' => array_map(fn (array $item) => array_diff_key($item, array_flip(self::INTERNAL_ITEM_FIELDS)), $preview['items']),
         ];
+    }
+
+    /**
+     * The series key a suggested show name groups under: its normalized base and
+     * season number, so "Ao Ashi S2" and "Ao Ashi 2nd Season" are one series.
+     */
+    public function seriesKey(string $suggestedName): string
+    {
+        $normalized = $this->normalizer->normalize($suggestedName);
+        $base = str_replace(' ', '', $normalized->base);
+
+        return ($base !== '' ? $base : mb_strtolower(trim($suggestedName))).'|s'.$normalized->seasonNumber();
     }
 
     /**
@@ -119,25 +186,28 @@ final class NyaaImportPreviews
      */
     private function row(NyaaItem $item): array
     {
-        $parsed = $this->titles->parse($item->title, null);
+        $parsed = $this->titles->parse($item->title);
+        $suggested = $parsed->suggestedShowName();
 
         return [
             'key' => $item->nyaaId,
             'title' => $item->title,
-            'showName' => $parsed->name,
+            'group' => $parsed->group,
+            'showName' => $suggested,
+            'parsedName' => $parsed->name,
+            'season' => $parsed->season,
+            'seriesKey' => $suggested === null ? null : $this->seriesKey($suggested),
             'episode' => $parsed->episode,
             'version' => $parsed->version,
             'isBatch' => $parsed->isBatch,
             'batchFrom' => $parsed->batchFrom,
             'batchTo' => $parsed->batchTo,
             'resolution' => $parsed->resolution,
-            'crc' => $parsed->crc,
             'infohash' => $item->infohash,
             'magnet' => $item->infohash === null ? null : MagnetLink::build($item->infohash, $item->title),
             'torrentUrl' => $item->torrentUrl,
             'viewUrl' => $item->viewUrl,
             'publishedAt' => $item->publishedAt?->toIso8601String(),
-            'publishedAtRaw' => $item->publishedAtRaw,
             'size' => $item->size,
             'seeders' => $item->seeders,
             'trusted' => $item->trusted,
@@ -145,7 +215,59 @@ final class NyaaImportPreviews
             'state' => 'new',
             'selected' => true,
             'reason' => null,
+            'publishedAtRaw' => $item->publishedAtRaw,
+            'crc' => $parsed->crc,
+            'altTitles' => $parsed->altTitles,
         ];
+    }
+
+    /**
+     * The parsed items grouped into series, each with its suggested target.
+     * The SubsPlease item names the series when there is one (its name is
+     * exactly the show's), otherwise the first item.
+     *
+     * @param  array<string, array<string, mixed>>  $items
+     * @return array<string, array<string, mixed>> by series key, ordered by suggested name
+     */
+    private function series(array $items): array
+    {
+        $grouped = [];
+        foreach ($items as $item) {
+            if ($item['seriesKey'] !== null) {
+                $grouped[$item['seriesKey']][] = $item;
+            }
+        }
+
+        $series = [];
+        foreach ($grouped as $key => $members) {
+            $lead = collect($members)->first(fn (array $item) => $item['group'] === ReleaseTitleParser::SUBSPLEASE) ?? $members[0];
+            $season = $lead['season'] ?? $this->normalizer->normalize($lead['showName'])->season;
+            $groups = array_values(array_unique(array_filter(array_column($members, 'group'), fn ($group) => $group !== null)));
+            usort($groups, fn (string $a, string $b) => [$a !== ReleaseTitleParser::SUBSPLEASE, mb_strtolower($a)] <=> [$b !== ReleaseTitleParser::SUBSPLEASE, mb_strtolower($b)]);
+
+            $altTitles = [];
+            foreach ($members as $member) {
+                foreach ($member['altTitles'] as $alt) {
+                    $altTitles[mb_strtolower($alt)] ??= $alt;
+                }
+            }
+            $altTitles = array_values($altTitles);
+
+            $series[$key] = [
+                'key' => (string) $key,
+                'parsedName' => $lead['parsedName'],
+                'season' => $season,
+                'suggestedName' => $lead['showName'],
+                'altTitles' => $altTitles,
+                'groups' => $groups,
+                'itemKeys' => array_column($members, 'key'),
+                ...$this->targets->suggest($lead['showName'], $season, $altTitles),
+            ];
+        }
+
+        uasort($series, fn (array $a, array $b) => [$a['suggestedName'], $a['key']] <=> [$b['suggestedName'], $b['key']]);
+
+        return $series;
     }
 
     /**
@@ -207,57 +329,117 @@ final class NyaaImportPreviews
     }
 
     /**
-     * @param  array<string, array<string, mixed>>  $items
-     * @param  array<string, true>  $inQbit
-     * @param  array<string, Release>  $known
-     * @return array<string, array<string, mixed>>
+     * Every item's state, selection and reason for the series' current targets,
+     * and the items in display order.
+     *
+     * @param  array<string, mixed>  $preview
+     * @return array<string, mixed>
      */
-    private function assignStates(array $items, array $inQbit, array $known): array
+    private function withStates(array $preview): array
     {
-        $versionOf = fn (array $item) => $item['version'] ?? 1;
+        $targets = array_column($preview['series'], 'target', 'key');
+        $held = HeldEpisodes::forShows(array_values(array_filter(array_map(
+            fn (array $target) => $target['kind'] === 'existing' ? $target['showId'] : null,
+            $targets,
+        ))));
 
-        // Highest version per show, episode and resolution (remakes count too: a v2 is a v2).
+        $items = [];
+        foreach ($preview['items'] as $item) {
+            $items[$item['key']] = $item;
+        }
+
+        $versionOf = fn (array $item) => $item['version'] ?? 1;
+        $episodeOf = fn (array $item) => Release::episodeKey($item['episode']);
+        $versionKey = fn (array $item) => $item['seriesKey'].'|'.$item['group'].'|'.$episodeOf($item).'|'.$item['resolution'];
+
+        // Highest version per series, group, episode and resolution (remakes count too: a v2 is a v2).
         $best = [];
         foreach ($items as $item) {
-            if ($item['showName'] !== null && ! $item['isBatch'] && $item['episode'] !== null) {
-                $group = $item['showName'].'|'.$item['episode'].'|'.$item['resolution'];
-                $best[$group] = max($best[$group] ?? 0, $versionOf($item));
+            if ($item['seriesKey'] !== null && ! $item['isBatch'] && $item['episode'] !== null) {
+                $best[$versionKey($item)] = max($best[$versionKey($item)] ?? 0, $versionOf($item));
             }
         }
 
-        // Batches per show, for the "prefer the batch" rule (as when tracking: DownloadPlanner).
+        // Batches per series, for the "prefer the batch" rule (as when tracking: DownloadPlanner).
         $batches = [];
         foreach ($items as $item) {
-            if ($item['showName'] !== null && $item['isBatch'] && ! $item['remake']) {
-                $batches[$item['showName']][] = $item;
+            if ($item['seriesKey'] !== null && $item['isBatch'] && ! $item['remake']) {
+                $batches[$item['seriesKey']][] = $item;
+            }
+        }
+
+        $states = [];
+        foreach ($items as $key => $item) {
+            $target = $item['seriesKey'] === null ? null : ($targets[$item['seriesKey']] ?? null);
+            $have = $target !== null && $target['kind'] === 'existing' && ! $item['isBatch']
+                ? $held->reasonFor($target['showId'], $item['episode'])
+                : null;
+
+            $states[$key] = match (true) {
+                $item['seriesKey'] === null => ['unparsed', "Torii couldn't read a show and episode from this title."],
+                $item['inQbit'] => ['in_qbit', 'Already in qBittorrent.'],
+                $item['known'] === 'downloaded' => ['known_release', 'Torii already downloaded this release.'],
+                $item['known'] === 'sent' => ['known_release', 'Torii already sent this release to qBittorrent.'],
+                $have !== null => ['have_episode', $have],
+                ! $item['isBatch'] && $item['episode'] !== null && $versionOf($item) < ($best[$versionKey($item)] ?? 0) => ['superseded', 'v'.$best[$versionKey($item)].' of this episode is also in the list.'],
+                default => null,
+            };
+        }
+
+        // The same episode of a series from several groups: keep one (SubsPlease, then trusted, then most seeders).
+        $buckets = [];
+        foreach ($items as $key => $item) {
+            if ($states[$key] === null && ! $item['isBatch'] && $item['episode'] !== null) {
+                $buckets[$item['seriesKey'].'|'.$episodeOf($item)][] = $item;
+            }
+        }
+
+        foreach ($buckets as $bucket) {
+            if (count(array_unique(array_map(fn (array $item) => (string) $item['group'], $bucket))) < 2) {
+                continue;
+            }
+
+            usort($bucket, fn (array $a, array $b) => [
+                $a['remake'], $a['group'] !== ReleaseTitleParser::SUBSPLEASE, ! $a['trusted'], -$a['seeders'], $a['key'],
+            ] <=> [
+                $b['remake'], $b['group'] !== ReleaseTitleParser::SUBSPLEASE, ! $b['trusted'], -$b['seeders'], $b['key'],
+            ]);
+            $kept = $bucket[0];
+
+            foreach ($bucket as $item) {
+                if ($item['group'] !== $kept['group']) {
+                    $states[$item['key']] = ['duplicate_episode', "Episode {$item['episode']} is also in the list from ".($kept['group'] ?? 'another group').'.'];
+                }
             }
         }
 
         foreach ($items as $key => $item) {
-            $release = $known[$item['infohash'] ?? ''] ?? $known[$item['viewUrl']] ?? null;
-            $group = $item['showName'].'|'.$item['episode'].'|'.$item['resolution'];
-
-            [$state, $reason] = match (true) {
-                $item['showName'] === null => ['unparsed', "The title isn't in SubsPlease's format, so Torii can't tell its show or episode."],
-                $item['infohash'] !== null && isset($inQbit[$item['infohash']]) => ['in_qbit', 'Already in qBittorrent.'],
-                $release !== null && $release->downloaded_at !== null => ['known_release', 'Torii already downloaded this release.'],
-                $release !== null && in_array($release->dispatch_status, [DispatchStatus::Sent, DispatchStatus::Exists], true) => ['known_release', 'Torii already sent this release to qBittorrent.'],
-                ! $item['isBatch'] && $item['episode'] !== null && $versionOf($item) < ($best[$group] ?? 0) => ['superseded', 'v'.$best[$group].' of this episode is also in the list.'],
-                $item['remake'] => ['new', 'Marked as a remake on Nyaa.'],
-                default => ['new', $this->coveredBy($item, $batches[$item['showName']] ?? [])],
-            };
+            [$state, $reason] = $states[$key] ?? ['new', match (true) {
+                $item['remake'] => 'Marked as a remake on Nyaa.',
+                default => $this->coveredBy($item, $batches[$item['seriesKey']] ?? []),
+            }];
 
             $items[$key] = [...$item, 'state' => $state, 'selected' => $reason === null, 'reason' => $reason];
         }
 
-        return $items;
+        $order = array_flip(array_column($preview['series'], 'key'));
+
+        uasort($items, fn (array $a, array $b) => [
+            $a['seriesKey'] === null, $order[$a['seriesKey'] ?? ''] ?? PHP_INT_MAX, ! $a['isBatch'], (float) ($a['batchFrom'] ?? $a['episode'] ?? INF),
+            $a['group'] !== ReleaseTitleParser::SUBSPLEASE, (string) $a['group'], $a['version'] ?? 1,
+        ] <=> [
+            $b['seriesKey'] === null, $order[$b['seriesKey'] ?? ''] ?? PHP_INT_MAX, ! $b['isBatch'], (float) ($b['batchFrom'] ?? $b['episode'] ?? INF),
+            $b['group'] !== ReleaseTitleParser::SUBSPLEASE, (string) $b['group'], $b['version'] ?? 1,
+        ]);
+
+        return [...$preview, 'items' => array_values($items)];
     }
 
     /**
-     * Why a single episode is left out in favour of a batch in the list, or null.
-     * Mirrors DownloadPlanner: a batch without a parsed range covers everything,
-     * otherwise episodes up to the highest batch end are covered; specials (no
-     * numeric episode) never are.
+     * Why a single episode is left out in favour of a batch of its series in the
+     * list, or null. Mirrors DownloadPlanner: a batch without a parsed range
+     * covers everything, otherwise episodes up to the highest batch end are
+     * covered; specials (no numeric episode) never are.
      *
      * @param  array<string, mixed>  $item
      * @param  array<int, array<string, mixed>>  $batches
@@ -285,22 +467,5 @@ final class NyaaImportPreviews
             ?? collect($batches)->sortByDesc('batchTo')->first();
 
         return "Covered by the batch of episodes {$covering['batchFrom']}-{$covering['batchTo']} in this list.";
-    }
-
-    /**
-     * By show (unparsed last), batches first, then by episode and version.
-     *
-     * @param  array<string, array<string, mixed>>  $items
-     * @return array<string, array<string, mixed>>
-     */
-    private function sorted(array $items): array
-    {
-        uasort($items, fn (array $a, array $b) => [
-            $a['showName'] === null, $a['showName'], ! $a['isBatch'], (float) ($a['batchFrom'] ?? $a['episode'] ?? INF), $a['version'] ?? 1,
-        ] <=> [
-            $b['showName'] === null, $b['showName'], ! $b['isBatch'], (float) ($b['batchFrom'] ?? $b['episode'] ?? INF), $b['version'] ?? 1,
-        ]);
-
-        return $items;
     }
 }

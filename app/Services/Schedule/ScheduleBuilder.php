@@ -74,7 +74,7 @@ final class ScheduleBuilder
                 'anime' => fn ($q) => $q->select(['id', 'title_romaji', 'title_english', 'format', 'status', 'episodes_total', 'season', 'season_year', 'is_adult', 'start_date']),
                 // Only what the cover URL and dimensions need, never `data`.
                 'anime.image' => fn ($q) => $q->select(['id', 'anime_id', 'sha256', 'width', 'height']),
-                'anime.links.show' => fn ($q) => $q->select(['id', 'name', 'is_tracked']),
+                'anime.links.show' => fn ($q) => $q->select(['id', 'name', 'is_tracked'])->withTrackability(),
             ])
             ->orderBy('airs_at')
             ->orderBy('anime_id')
@@ -125,7 +125,13 @@ final class ScheduleBuilder
                 'seasonYear' => $anime->season_year,
                 'isAdult' => $anime->is_adult,
             ],
-            'show' => $show === null ? null : ['id' => $show->id, 'name' => $show->name, 'isTracked' => $show->is_tracked],
+            'show' => $show === null ? null : [
+                'id' => $show->id,
+                'name' => $show->name,
+                'isTracked' => $show->is_tracked,
+                'trackable' => $show->trackability()['trackable'],
+                'trackBlockedReason' => $show->trackability()['reason'],
+            ],
             'releaseState' => $show === null || $airing->airs_at->isAfter($now) || $this->numberingDiffers($anime, $highestEpisodes[$show->id] ?? null)
                 ? null
                 : $this->releaseState($releases->get($show->id) ?? new Collection, $airing->episode),

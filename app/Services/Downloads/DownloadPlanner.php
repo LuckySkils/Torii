@@ -8,28 +8,30 @@ use App\Enums\DispatchStatus;
 use App\Enums\TrackingMode;
 use App\Models\Release;
 use App\Models\Show;
+use App\Services\Releases\ReleaseTitleParser;
 use Illuminate\Database\Eloquent\Collection;
 
 final class DownloadPlanner
 {
     /**
      * The releases Torii would still queue for a show: distinct batches (newest per
-     * range) and distinct single episodes (highest version, newest per episode number,
-     * every special individually), excluding anything already sent or confirmed to exist.
+     * range) and distinct single episodes (per episode number compared by value:
+     * SubsPlease first, then highest version, then newest; every special
+     * individually), excluding anything already sent or confirmed to exist, and
+     * any single episode another group's release of the same number has already
+     * covered (sent, exists or downloaded): one episode is never fetched twice
+     * across groups (§6.4).
      *
      * @return Collection<int, Release>
      */
     public function downloadableSet(Show $show): Collection
     {
-        $releases = $show->releases()
-            ->where(function ($query) {
-                $query->whereNull('dispatch_status')
-                    ->orWhereNotIn('dispatch_status', [DispatchStatus::Sent, DispatchStatus::Exists]);
-            })
-            ->get();
+        $all = $show->releases()->get();
+
+        $releases = $all->reject(fn (Release $release) => $this->isDispatched($release));
 
         $batches = $this->dedupeBatches($releases->where('is_batch', true));
-        $singles = $this->dedupeSingles($releases->where('is_batch', false));
+        $singles = $this->dedupeSingles($this->withoutOtherGroupsEpisodes($releases->where('is_batch', false), $all));
 
         return $batches->merge($singles)->values();
     }
@@ -102,11 +104,51 @@ final class DownloadPlanner
         $specials = $singles->filter(fn (Release $release) => $release->episode === null);
 
         $dedupedNumbered = $numbered
-            ->groupBy(fn (Release $release) => $release->episode)
+            ->groupBy(fn (Release $release) => Release::episodeKey($release->episode))
             ->map(fn (Collection $group) => $this->bestVersion($group))
             ->values();
 
         return $dedupedNumbered->merge($specials)->values();
+    }
+
+    /**
+     * Drops single episodes whose number another group's release already covers
+     * (sent, exists or downloaded). The same group is left alone: a higher
+     * version of an episode still counts as new.
+     *
+     * @param  Collection<int, Release>  $singles  the undispatched single episodes
+     * @param  Collection<int, Release>  $all  every release of the show
+     * @return Collection<int, Release>
+     */
+    private function withoutOtherGroupsEpisodes(Collection $singles, Collection $all): Collection
+    {
+        $held = [];
+
+        foreach ($all as $release) {
+            if (! $release->is_batch && $release->episode !== null && ($this->isDispatched($release) || $release->downloaded_at !== null)) {
+                $held[Release::episodeKey($release->episode)][(string) $release->effectiveGroup()] = true;
+            }
+        }
+
+        if ($held === []) {
+            return $singles;
+        }
+
+        return $singles->reject(function (Release $release) use ($held) {
+            if ($release->episode === null) {
+                return false;
+            }
+
+            $groups = $held[Release::episodeKey($release->episode)] ?? [];
+            unset($groups[(string) $release->effectiveGroup()]);
+
+            return $groups !== [];
+        });
+    }
+
+    private function isDispatched(Release $release): bool
+    {
+        return in_array($release->dispatch_status, [DispatchStatus::Sent, DispatchStatus::Exists], true);
     }
 
     /**
@@ -129,6 +171,14 @@ final class DownloadPlanner
         return $group->reduce(function (?Release $carry, Release $release) {
             if ($carry === null) {
                 return $release;
+            }
+
+            // SubsPlease first: the episode the rule would have fetched.
+            $releaseIsSubsPlease = $release->effectiveGroup() === ReleaseTitleParser::SUBSPLEASE;
+            $carryIsSubsPlease = $carry->effectiveGroup() === ReleaseTitleParser::SUBSPLEASE;
+
+            if ($releaseIsSubsPlease !== $carryIsSubsPlease) {
+                return $releaseIsSubsPlease ? $release : $carry;
             }
 
             $releaseVersion = $release->version ?? 0;

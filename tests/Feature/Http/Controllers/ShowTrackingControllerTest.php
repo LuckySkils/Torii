@@ -35,9 +35,21 @@ function makeTrackableShow(string $name = 'Grand Blue S3'): Show
     ]);
 }
 
+/** A SubsPlease feed release already sent, so the show is trackable (§16) and nothing is left to queue. */
+function withSentSubsPleaseRelease(Show $show): Show
+{
+    Release::create([
+        'show_id' => $show->id, 'guid' => 'sent-'.$show->id, 'title' => "[SubsPlease] {$show->name} - 01 (1080p) [AAAAAAAA].mkv",
+        'episode' => '01', 'is_batch' => false, 'resolution' => '1080p', 'link' => 'magnet:?xt=urn:btih:'.sha1('sent-'.$show->id),
+        'published_at' => now(), 'first_seen_at' => now(), 'dispatch_status' => DispatchStatus::Sent, 'release_group' => 'SubsPlease',
+    ]);
+
+    return $show;
+}
+
 test('track flips a single show and dispatches the sync job', function () {
     Queue::fake();
-    $show = makeTrackableShow();
+    $show = withSentSubsPleaseRelease(makeTrackableShow());
 
     $response = $this->patch("/shows/{$show->id}/track", ['tracked' => true]);
 
@@ -52,8 +64,8 @@ test('track flips a single show and dispatches the sync job', function () {
 
 test('track-bulk flips every given show', function () {
     Queue::fake();
-    $a = makeTrackableShow('Grand Blue S3');
-    $b = makeTrackableShow('One Piece');
+    $a = withSentSubsPleaseRelease(makeTrackableShow('Grand Blue S3'));
+    $b = withSentSubsPleaseRelease(makeTrackableShow('One Piece'));
 
     $response = $this->post('/shows/track-bulk', ['ids' => [$a->id, $b->id], 'tracked' => true]);
 

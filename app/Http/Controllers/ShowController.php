@@ -39,7 +39,7 @@ class ShowController extends Controller
         $query = Show::query()->with([
             'latestRelease',
             'animeLink.anime.image' => fn ($query) => $query->select(['id', 'anime_id', 'sha256', 'width', 'height']),
-        ])->withExists('animeSuggestions');
+        ])->withExists('animeSuggestions')->withTrackability();
 
         if ($search !== '') {
             $query->whereLike('name', '%'.$this->escapeLikeValue($search).'%');

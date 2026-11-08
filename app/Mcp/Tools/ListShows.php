@@ -16,7 +16,7 @@ use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('list_shows')]
 #[Description(<<<'TEXT'
-    Torii's shows: the SubsPlease side, one per show name SubsPlease has released, which is what Torii tracks and downloads. Not the AniList catalog (use search_anime for that). Each row: id, name, isTracked, ruleState (state of its qBittorrent RSS download rule: none, pending, synced, disabled, error), trackingMode (rule: new episodes download automatically; batch: a finished show downloaded as a batch; null when untracked), latestEpisode, queuedCount (releases sent to qBittorrent), downloadedCount (releases qBittorrent finished), animeId (the linked anime, or null) and hasSuggestions (unreviewed anime link suggestions exist). Ordered by name. Use get_show for one show's releases. Read-only.
+    Torii's shows: the SubsPlease side, one per show name SubsPlease has released, which is what Torii tracks and downloads. Not the AniList catalog (use search_anime for that). Each row: id, name, isTracked, trackable (false when the show has no SubsPlease release, only releases imported by hand from other groups: track_show refuses it), ruleState (state of its qBittorrent RSS download rule: none, pending, synced, disabled, error), trackingMode (rule: new episodes download automatically; batch: a finished show downloaded as a batch; null when untracked), latestEpisode, queuedCount (releases sent to qBittorrent), downloadedCount (releases qBittorrent finished), animeId (the linked anime, or null) and hasSuggestions (unreviewed anime link suggestions exist). Ordered by name. Use get_show for one show's releases. Read-only.
     TEXT)]
 #[IsReadOnly]
 final class ListShows extends ToriiTool

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Actions\TrackShow;
+use App\Enums\DispatchStatus;
 use App\Enums\RuleState;
 use App\Enums\TrackingMode;
 use App\Jobs\QueueReleases;
@@ -23,9 +24,15 @@ function trackableShow(string $name = 'Grand Blue S3'): Show
     ]);
 }
 
-test('with no releases yet, still creates the rule and dispatches no download job', function () {
+test('with nothing left to queue, still creates the rule and dispatches no download job', function () {
     Queue::fake();
     $show = trackableShow();
+    // Its only release (SubsPlease's, so the show is trackable: §16) was already sent.
+    Release::create([
+        'show_id' => $show->id, 'guid' => 'GUID-SENT', 'title' => 'sent', 'episode' => '01', 'is_batch' => false, 'resolution' => '1080p',
+        'link' => 'magnet:?xt=urn:btih:SENT', 'published_at' => now(), 'first_seen_at' => now(),
+        'dispatch_status' => DispatchStatus::Sent, 'release_group' => 'SubsPlease',
+    ]);
 
     app(TrackShow::class)($show);
     $show->refresh();

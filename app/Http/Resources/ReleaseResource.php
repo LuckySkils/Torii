@@ -18,6 +18,8 @@ final class ReleaseResource extends JsonResource
         return [
             'id' => $this->id,
             'title' => $this->title,
+            // The release group (§4): "SubsPlease" for the feed, the parsed [Group] for a Nyaa import.
+            'group' => $this->effectiveGroup(),
             'show' => $this->show === null ? null : [
                 'id' => $this->show->id,
                 'name' => $this->show->name,

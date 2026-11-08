@@ -217,7 +217,7 @@ test('a row carries the airing, the anime with its cover metadata, and the linke
             'seasonYear' => 2026,
             'isAdult' => false,
         ],
-        'show' => ['id' => $show->id, 'name' => 'The Show', 'isTracked' => true],
+        'show' => ['id' => $show->id, 'name' => 'The Show', 'isTracked' => true, 'trackable' => true, 'trackBlockedReason' => null],
         'releaseState' => null, // future
         'isNewSeries' => false,
     ]);

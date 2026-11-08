@@ -132,3 +132,66 @@ test('specials (non-numbered, non-batch releases) are each included individually
     expect($plan->releaseIds)->toEqualCanonicalizing([$batch->id, $special1->id, $special2->id])
         ->and($plan->createRule)->toBeTrue();
 });
+
+// ── Several groups on one show (§6.4, Nyaa import of other groups) ───────────
+
+test('an episode another group already has (sent, exists or downloaded) is not downloadable again', function () {
+    $show = planningShow();
+
+    planningRelease($show, ['episode' => '06', 'release_group' => 'Erai-raws', 'source' => 'nyaa', 'dispatch_status' => DispatchStatus::Sent]);
+    // Downloaded without a dispatch status (as the RSS rule's downloads are): still counts for other groups.
+    $judas7 = planningRelease($show, ['episode' => '7', 'release_group' => 'Judas', 'source' => 'nyaa', 'downloaded_at' => now()]);
+    planningRelease($show, ['episode' => '08', 'release_group' => 'Judas', 'source' => 'nyaa', 'dispatch_status' => DispatchStatus::Exists]);
+    $subsPlease6 = planningRelease($show, ['episode' => '6', 'release_group' => 'SubsPlease']);
+    planningRelease($show, ['episode' => '07', 'release_group' => 'SubsPlease']);
+    planningRelease($show, ['episode' => '08', 'release_group' => 'SubsPlease']);
+    $subsPlease9 = planningRelease($show, ['episode' => '09', 'release_group' => 'SubsPlease']);
+
+    $downloadable = (new DownloadPlanner)->downloadableSet($show);
+
+    // Judas' own episode 7 stays as it always did (same group); SubsPlease's 06, 07 and 08 don't.
+    expect($downloadable->pluck('id')->sort()->values()->all())->toBe([$judas7->id, $subsPlease9->id])
+        ->and($downloadable->pluck('id'))->not->toContain($subsPlease6->id);
+});
+
+test('the same group is unchanged: a higher version of an episode it already sent still counts as new', function () {
+    $show = planningShow();
+
+    planningRelease($show, ['episode' => '06', 'version' => null, 'release_group' => 'Erai-raws', 'source' => 'nyaa', 'downloaded_at' => now()]);
+    $v2 = planningRelease($show, ['episode' => '06', 'version' => 2, 'release_group' => 'Erai-raws', 'source' => 'nyaa']);
+
+    expect((new DownloadPlanner)->downloadableSet($show)->pluck('id')->all())->toBe([$v2->id]);
+});
+
+test('a feed release without a stored group counts as SubsPlease', function () {
+    $show = planningShow();
+
+    planningRelease($show, ['episode' => '03', 'dispatch_status' => DispatchStatus::Sent]);
+    planningRelease($show, ['episode' => '03', 'release_group' => 'Erai-raws', 'source' => 'nyaa']);
+
+    expect((new DownloadPlanner)->downloadableSet($show))->toBeEmpty();
+});
+
+test('competing undispatched singles of one episode: SubsPlease first, then highest version, then newest', function () {
+    $show = planningShow();
+
+    planningRelease($show, ['episode' => '05', 'version' => 2, 'release_group' => 'Erai-raws', 'source' => 'nyaa', 'published_at' => '2026-09-08 02:00:00']);
+    $subsPlease = planningRelease($show, ['episode' => '5', 'release_group' => 'SubsPlease', 'published_at' => '2026-09-08 00:00:00']);
+    planningRelease($show, ['episode' => '06', 'release_group' => 'Erai-raws', 'source' => 'nyaa', 'published_at' => '2026-09-15 00:00:00']);
+    $judasV2 = planningRelease($show, ['episode' => '06', 'version' => 2, 'release_group' => 'Judas', 'source' => 'nyaa', 'published_at' => '2026-09-14 00:00:00']);
+    planningRelease($show, ['episode' => '07', 'release_group' => 'Erai-raws', 'source' => 'nyaa', 'published_at' => '2026-09-22 00:00:00']);
+    $newest7 = planningRelease($show, ['episode' => '07', 'release_group' => 'Judas', 'source' => 'nyaa', 'published_at' => '2026-09-22 05:00:00']);
+
+    $ids = (new DownloadPlanner)->downloadableSet($show)->pluck('id')->sort()->values()->all();
+
+    expect($ids)->toBe(collect([$subsPlease->id, $judasV2->id, $newest7->id])->sort()->values()->all());
+});
+
+test('batches are unchanged by other groups\' episodes', function () {
+    $show = planningShow();
+
+    planningRelease($show, ['episode' => '06', 'release_group' => 'Erai-raws', 'source' => 'nyaa', 'dispatch_status' => DispatchStatus::Sent]);
+    $batch = planningRelease($show, ['is_batch' => true, 'batch_from' => 1, 'batch_to' => 12, 'release_group' => 'SubsPlease']);
+
+    expect((new DownloadPlanner)->downloadableSet($show)->pluck('id')->all())->toBe([$batch->id]);
+});

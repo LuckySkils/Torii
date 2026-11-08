@@ -121,7 +121,12 @@ class AnimeController extends Controller
 
     public function show(Anime $anime): InertiaResponse
     {
-        $anime->load([...$this->listRelations(), 'externalIds', 'links.show.image' => fn ($q) => $q->select(['id', 'show_id', 'sha256'])]);
+        $anime->load([
+            ...$this->listRelations(),
+            'links.show' => fn ($q) => $q->select(['id', 'name', 'is_tracked'])->withTrackability(),
+            'externalIds',
+            'links.show.image' => fn ($q) => $q->select(['id', 'show_id', 'sha256']),
+        ]);
         $this->requestMissingCovers([$anime]);
 
         return Inertia::render('Anime/Show', [
@@ -142,6 +147,8 @@ class AnimeController extends Controller
                 'name' => $link->show->name,
                 'imageUrl' => $link->show->image?->url(),
                 'isTracked' => $link->show->is_tracked,
+                'trackable' => $link->show->trackability()['trackable'],
+                'trackBlockedReason' => $link->show->trackability()['reason'],
                 'linkSource' => $link->source->value,
                 'confidence' => $link->confidence,
                 'linkedAt' => $link->linked_at->toIso8601String(),
@@ -164,7 +171,7 @@ class AnimeController extends Controller
                 ->with([
                     // Only what the cover URL and dimensions need, never `data`.
                     'image' => fn ($q) => $q->select(['id', 'anime_id', 'sha256', 'width', 'height']),
-                    'links.show' => fn ($q) => $q->select(['id', 'name', 'is_tracked']),
+                    'links.show' => fn ($q) => $q->select(['id', 'name', 'is_tracked'])->withTrackability(),
                 ])
                 ->find($id);
 
@@ -193,7 +200,13 @@ class AnimeController extends Controller
                 'genres' => $anime->genres ?? [],
                 'isAdult' => $anime->is_adult,
                 'siteUrl' => $anime->site_url,
-                'linkedShow' => $show === null ? null : ['id' => $show->id, 'name' => $show->name, 'isTracked' => $show->is_tracked],
+                'linkedShow' => $show === null ? null : [
+                    'id' => $show->id,
+                    'name' => $show->name,
+                    'isTracked' => $show->is_tracked,
+                    'trackable' => $show->trackability()['trackable'],
+                    'trackBlockedReason' => $show->trackability()['reason'],
+                ],
             ];
         });
 

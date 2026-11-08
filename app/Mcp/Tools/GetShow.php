@@ -15,7 +15,7 @@ use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('get_show')]
 #[Description(<<<'TEXT'
-    One Torii show (SubsPlease side) by show id: everything list_shows returns, plus ruleError, premieredAt, releasesTotal, its newest releases (at most 50, newest first; each with episode, version, batch range, publishedAt, dispatchStatus — null: never sent, "sent": queued in qBittorrent, "exists": qBittorrent already had it, "error": sending failed, see dispatchError — and downloadedAt (when qBittorrent finished it)), its anime link (anime summary, linkSource auto or manual, confidence) and pending anime link suggestions with their match scores. Read-only.
+    One Torii show (SubsPlease side) by show id: everything list_shows returns, plus trackBlockedReason (why it can't be tracked when trackable is false, else null), ruleError, premieredAt, releasesTotal, its newest releases (at most 50, newest first; each with episode, version, batch range, publishedAt, dispatchStatus — null: never sent, "sent": queued in qBittorrent, "exists": qBittorrent already had it, "error": sending failed, see dispatchError — and downloadedAt (when qBittorrent finished it)), its anime link (anime summary, linkSource auto or manual, confidence) and pending anime link suggestions with their match scores. Read-only.
     TEXT)]
 #[IsReadOnly]
 final class GetShow extends ToriiTool

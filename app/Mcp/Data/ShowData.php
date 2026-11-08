@@ -30,6 +30,7 @@ final class ShowData
         return $query
             ->with(['latestRelease', 'animeLink'])
             ->withExists('animeSuggestions')
+            ->withTrackability()
             ->withCount([
                 'releases as queued_count' => fn ($q) => $q->whereIn('dispatch_status', [DispatchStatus::Sent, DispatchStatus::Exists]),
                 'releases as downloaded_count' => fn ($q) => $q->whereNotNull('downloaded_at'),
@@ -49,6 +50,7 @@ final class ShowData
             'id' => $show->id,
             'name' => $show->name,
             'isTracked' => $show->is_tracked,
+            'trackable' => $show->trackability()['trackable'],
             'ruleState' => $show->rule_state->value,
             'trackingMode' => $show->tracking_mode?->value,
             'latestEpisode' => $latest === null ? null : [
@@ -90,6 +92,7 @@ final class ShowData
 
         return [
             ...self::row($show),
+            'trackBlockedReason' => $show->trackability()['reason'],
             'ruleError' => $show->rule_error,
             'premieredAt' => $show->premiered_at?->toIso8601String(),
             'releasesTotal' => $show->releases()->count(),

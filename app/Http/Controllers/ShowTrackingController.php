@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Actions\QueueMissingReleases;
+use App\Actions\ShowNotTrackable;
 use App\Actions\TrackShow;
 use App\Actions\UntrackShow;
 use App\Enums\RuleState;
@@ -22,7 +23,11 @@ class ShowTrackingController extends Controller
         $data = $request->validate(['tracked' => 'required|boolean']);
 
         if ($data['tracked']) {
-            $trackShow($show);
+            try {
+                $trackShow($show);
+            } catch (ShowNotTrackable $e) {
+                return back()->with('error', "Can't track \"{$show->name}\". {$e->getMessage()}");
+            }
 
             return back()->with('success', "Now tracking \"{$show->name}\".");
         }
@@ -41,18 +46,30 @@ class ShowTrackingController extends Controller
         ]);
 
         $shows = Show::whereIn('id', $data['ids'])->get();
+        $skipped = 0;
 
         foreach ($shows as $show) {
-            if ($data['tracked']) {
-                $trackShow($show);
-            } else {
+            if (! $data['tracked']) {
                 $untrackShow($show);
+
+                continue;
+            }
+
+            try {
+                $trackShow($show);
+            } catch (ShowNotTrackable) {
+                $skipped++;
             }
         }
 
         $verb = $data['tracked'] ? 'Tracking' : 'Untracking';
+        $done = $shows->count() - $skipped;
 
-        return back()->with('success', "{$verb} {$shows->count()} shows.");
+        if ($skipped > 0) {
+            return back()->with('success', "{$verb} {$done} shows. Skipped {$skipped} with no SubsPlease releases: Torii's download rule follows SubsPlease's feed.");
+        }
+
+        return back()->with('success', "{$verb} {$done} shows.");
     }
 
     public function deleteRule(Show $show, RulesDriver $driver): RedirectResponse

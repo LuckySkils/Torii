@@ -10,6 +10,7 @@ use App\Events\ShowDiscovered;
 use App\Models\Release;
 use App\Models\Show;
 use App\Services\Premiere\PremiereCalculator;
+use App\Services\Releases\ReleaseTitleParser;
 use Illuminate\Support\Str;
 use SimpleXMLElement;
 
@@ -135,6 +136,7 @@ final class FeedIngestor
             'size_label' => $sizeLabel,
             'published_at' => $this->pubDateCorrector->correct($rawPubDate, $firstSeenAt, (string) $item->title),
             'published_at_raw' => $rawPubDate,
+            'release_group' => ReleaseTitleParser::SUBSPLEASE,
         ];
 
         if ($existing === null) {

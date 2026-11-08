@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Mcp\Tools;
 
+use App\Actions\ShowNotTrackable;
 use App\Actions\TrackShow as TrackShowAction;
 use App\Models\Show;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -17,7 +18,7 @@ use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('track_show')]
 #[Description(<<<'TEXT'
-    CHANGES STATE: starts tracking a Torii show, exactly like the Track button in Torii's web UI, and starts downloads immediately. Torii queues every already-released episode it hasn't sent to qBittorrent yet (where SubsPlease has a batch, the batch replaces the episodes it covers) and, unless a batch covers everything released, creates a qBittorrent RSS rule so new episodes download automatically. Calling it on a show that is already tracked runs the same step again, which queues anything not yet sent. Only call it when the user has asked to track or download this show. Returns: wasTracked, trackingMode (rule: new episodes download automatically; batch: downloaded as a batch, no rule), ruleCreated, ruleState (pending until the background job has synced the rule with qBittorrent), releasesQueued (how many releases were handed to the background job that sends them to qBittorrent) and their episodes.
+    CHANGES STATE: starts tracking a Torii show, exactly like the Track button in Torii's web UI, and starts downloads immediately. Torii queues every already-released episode it hasn't sent to qBittorrent yet (where SubsPlease has a batch, the batch replaces the episodes it covers) and, unless a batch covers everything released, creates a qBittorrent RSS rule so new episodes download automatically. Calling it on a show that is already tracked runs the same step again, which queues anything not yet sent. A show with no SubsPlease release (only releases imported by hand from other groups; list_shows/get_show say trackable: false) can't be tracked, since the rule follows SubsPlease's feed: the call is refused with the reason and nothing changes. Only call it when the user has asked to track or download this show. Returns: wasTracked, trackingMode (rule: new episodes download automatically; batch: downloaded as a batch, no rule), ruleCreated, ruleState (pending until the background job has synced the rule with qBittorrent), releasesQueued (how many releases were handed to the background job that sends them to qBittorrent) and their episodes.
     TEXT)]
 #[IsReadOnly(false)]
 #[IsDestructive(false)]
@@ -43,7 +44,13 @@ final class TrackShow extends WriteTool
         }
 
         $wasTracked = $show->is_tracked;
-        $plan = ($this->trackShow)($show);
+
+        try {
+            $plan = ($this->trackShow)($show);
+        } catch (ShowNotTrackable $e) {
+            return $this->failed($request, "Can't track \"{$show->name}\". {$e->getMessage()}");
+        }
+
         $show->refresh();
 
         return $this->done($request, [

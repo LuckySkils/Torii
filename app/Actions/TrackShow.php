@@ -18,11 +18,23 @@ final class TrackShow
     ) {}
 
     /**
+     * The one place trackability is enforced: an untracked show without a
+     * SubsPlease release is refused (nothing changes). Re-tracking an already
+     * tracked show is always allowed.
+     *
      * @return DownloadPlan what was queued and whether a rule was created, so a
      *                      caller (the MCP track_show tool) can report it
+     *
+     * @throws ShowNotTrackable
      */
     public function __invoke(Show $show): DownloadPlan
     {
+        $trackability = $show->trackability();
+
+        if (! $trackability['trackable']) {
+            throw new ShowNotTrackable($show, (string) $trackability['reason']);
+        }
+
         $plan = $this->planner->plan($show);
 
         $show->update([
