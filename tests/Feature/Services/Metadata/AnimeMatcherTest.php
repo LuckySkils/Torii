@@ -38,11 +38,31 @@ test('normalization unifies season markers and drops tags and punctuation', func
     ['[SubsPlease] One Piece (1080p)', 'one piece', null],
     ['Some Show (TV)', 'some show', null],
     ['Azur Lane - Bisoku Zenshin! S2', 'azur lane bisoku zenshin', 2],
-    ['Toumei na Yoru ni Kakeru Kimi to, Me ni Mienai Koi wo Shita.', 'toumei na yoru ni kakeru kimi to me ni mienai koi wo shita', null],
+    // The particle "wo" folds to "o" (as a whole word only).
+    ['Toumei na Yoru ni Kakeru Kimi to, Me ni Mienai Koi wo Shita.', 'toumei na yoru ni kakeru kimi to me ni mienai koi o shita', null],
     // Lowercase "ii" is a romaji word, not a numeral; "Part II" isn't a season.
     ['Ii Hito', 'ii hito', null],
     ['Show Part II', 'show part ii', null],
 ]);
+
+test('the particle "wo" folds to "o", only as a whole word', function (string $title, string $plain) {
+    expect((new TitleNormalizer)->normalize($title)->plain)->toBe($plain);
+})->with([
+    'particle' => ['Hyouken no Majutsushi ga Sekai wo Suberu', 'hyouken no majutsushi ga sekai o suberu'],
+    'capitalised, before punctuation' => ['Koi Wo, Shita', 'koi o shita'],
+    'at the start and end' => ['wo Suberu wo', 'o suberu o'],
+    'inside words stays' => ['World of Wolf Kowai Wonder Two', 'world of wolf kowai wonder two'],
+    'hyphenated stays a word' => ['Sekai-wo-Suberu', 'sekai o suberu'],
+    'woo stays' => ['Woo Hoo', 'woo hoo'],
+]);
+
+test('"wo" and "o" romanizations of the particle match exactly', function () {
+    // Real names (test stand, 2026-11-08): Erai-raws' "o" against AniList's "wo".
+    expect(matcher()->score('Hyouken no Majutsushi ga Sekai o Suberu S2', ['Hyouken no Majutsushi ga Sekai wo Suberu II']))->toBe(90)
+        ->and(matcher()->score('Hyouken no Majutsushi ga Sekai o Suberu II', ['Hyouken no Majutsushi ga Sekai wo Suberu II']))->toBe(100)
+        // Constructed: the other direction.
+        ->and(matcher()->score('Buchigire Reijou wa Houfuku wo Chikaimashita', ['Buchigire Reijou wa Houfuku o Chikaimashita']))->toBe(100);
+});
 
 test('an exact normalized match scores 100', function () {
     expect(matcher()->score('One Piece', ['ONE PIECE']))->toBe(100)

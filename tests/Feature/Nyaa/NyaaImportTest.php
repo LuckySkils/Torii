@@ -219,13 +219,13 @@ test('preview: an existing show with the exact name is the target, several shows
         'http://qbit.test:8080/api/v2/torrents/info*' => Http::response([]),
     ]);
 
-    expect(nyaaPreview()['series'][0]['target'])->toBe(['kind' => 'existing', 'showId' => $show->id, 'showName' => HANAORI, 'trackable' => false]);
+    expect(nyaaPreview()['series'][0]['target'])->toBe(['kind' => 'existing', 'showId' => $show->id, 'showName' => HANAORI, 'trackable' => false, 'trackBlockedReason' => "No SubsPlease releases: Torii's download rule only follows SubsPlease's feed."]);
 
     $preview = nyaaPreview();
 
     expect(array_column($preview['series'], 'suggestedName'))->toBe([HANAORI, 'Other Show'])
         ->and(array_column($preview['series'], 'target'))->toBe([
-            ['kind' => 'existing', 'showId' => $show->id, 'showName' => HANAORI, 'trackable' => false],
+            ['kind' => 'existing', 'showId' => $show->id, 'showName' => HANAORI, 'trackable' => false, 'trackBlockedReason' => "No SubsPlease releases: Torii's download rule only follows SubsPlease's feed."],
             ['kind' => 'new', 'name' => 'Other Show', 'trackable' => true, 'trackBlockedReason' => null],
         ])
         ->and($preview['warnings'])->toBe([]);
@@ -333,7 +333,7 @@ test('confirm accepts only previewed keys, and an expired or used preview is rej
     expect(Release::count())->toBe(1);
 });
 
-test('an unparsed item can still be added deliberately, without a show', function () {
+test('an unparsed item is never imported, even when its key is sent', function () {
     Queue::fake();
     fakeNyaa([['title' => '[Erai-raws] Something [1080p].mkv', 'id' => 6, 'hash' => hashFor('06')]]);
     $preview = nyaaPreview();
@@ -341,10 +341,14 @@ test('an unparsed item can still be added deliberately, without a show', functio
     expect($preview['series'])->toBe([])
         ->and($preview['items'][0])->toMatchArray(['state' => 'unparsed', 'group' => 'Erai-raws', 'seriesKey' => null]);
 
-    $this->postJson('/import/nyaa/confirm', ['previewId' => $preview['previewId'], 'keys' => ['6']])->assertOk()->assertJsonPath('queued', 1);
+    $this->postJson('/import/nyaa/confirm', ['previewId' => $preview['previewId'], 'keys' => ['6']])
+        ->assertOk()
+        ->assertJsonPath('queued', 0)
+        ->assertJsonPath('skipped', [['key' => '6', 'title' => '[Erai-raws] Something [1080p].mkv', 'reason' => "Torii couldn't read a show and episode from this title, so it can't be imported."]]);
 
-    expect(Release::first())->show_id->toBeNull()->source->toBe(ReleaseSource::Nyaa)
+    expect(Release::count())->toBe(0)
         ->and(Show::count())->toBe(0);
+    Queue::assertNotPushed(QueueReleases::class);
 });
 
 test('releases:fix-published leaves Nyaa releases alone: their pubDate is already UTC', function () {

@@ -66,7 +66,7 @@ class ShowTrackingController extends Controller
         $done = $shows->count() - $skipped;
 
         if ($skipped > 0) {
-            return back()->with('success', "{$verb} {$done} shows. Skipped {$skipped} with no SubsPlease releases: Torii's download rule follows SubsPlease's feed.");
+            return back()->with('success', "{$verb} {$done} shows. Skipped {$skipped}. ".Show::blockedReason());
         }
 
         return back()->with('success', "{$verb} {$done} shows.");

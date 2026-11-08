@@ -48,6 +48,21 @@ final class ReleaseTitleParser
 
     private const BATCH_WORD = '/(?<![A-Za-z0-9])Batch(?![A-Za-z0-9])/i';
 
+    /**
+     * A season written at the end of the name: `Season 2`, `2nd Season`, `S2`, or
+     * an uppercase Roman `II`–`X` (as TitleNormalizer reads them, §11). Only these
+     * explicit markers count; a bare trailing number never does ("Mob Psycho 100").
+     *
+     * @var array<int, string>
+     */
+    private const NAME_SEASON = [
+        '/^(?<name>.*\S)\s+Season\s+(?<season>\d{1,2})$/iu',
+        '/^(?<name>.*\S)\s+(?<season>\d{1,2})(?:st|nd|rd|th)\s+Season$/iu',
+        '/^(?<name>.*\S)\s+S(?<season>\d{1,2})$/u',
+    ];
+
+    private const ROMAN_SEASONS = ['II' => 2, 'III' => 3, 'IV' => 4, 'V' => 5, 'VI' => 6, 'VII' => 7, 'VIII' => 8, 'IX' => 9, 'X' => 10];
+
     /** Words that describe the file, not the show: dropped from alt titles. */
     private const TECHNICAL_WORD = '/^(?:dual[-\s]?audio|multi[-\s]?subs?|multisubs?|multiple|subtitles?|subs?|softsubs?|eng(?:lish)?|dub(?:bed)?|weekly|batch|complete|uncensored|uncut|bd|bdrip|blu-?ray|web|web-?dl|web-?rip|hevc|avc|x26[45]|h\.?26[45]|av1|aac(?:2\.0)?|e?ac-?3|ddp?\d(?:\.\d)?|flac|opus|\d{1,2}-?bits?|hdr|sdr|amzn|cr|nf|dsnp|hidive|adn|\d{3,4}p|[0-9a-f]{8}|dual|audio|multi)$/i';
 
@@ -96,10 +111,17 @@ final class ReleaseTitleParser
             return ParsedRelease::unparsed($group);
         }
 
+        $season = $marker['season'];
+
+        if ($season === null) {
+            // "Ao no Hako Season 2" → "Ao no Hako", season 2 (suggested show "Ao no Hako S2").
+            [$name, $season] = $this->seasonFromName($name);
+        }
+
         return new ParsedRelease(
             group: $group,
             name: $name,
-            season: $marker['season'],
+            season: $season,
             episode: $marker['episode'],
             version: $marker['version'],
             isBatch: $marker['isBatch'],
@@ -195,6 +217,36 @@ final class ReleaseTitleParser
         }
 
         return null;
+    }
+
+    /**
+     * @return array{0: string, 1: int|null} the name without a trailing season marker, and the season
+     */
+    private function seasonFromName(string $name): array
+    {
+        foreach (self::NAME_SEASON as $pattern) {
+            if (preg_match($pattern, $name, $match) === 1) {
+                return $this->withoutMarker($name, $match['name'], (int) $match['season']);
+            }
+        }
+
+        $roman = implode('|', array_map(fn (string $numeral) => preg_quote($numeral, '/'), array_keys(self::ROMAN_SEASONS)));
+
+        if (preg_match('/^(?<name>.*\S)\s+(?<numeral>'.$roman.')$/u', $name, $match) === 1) {
+            return $this->withoutMarker($name, $match['name'], self::ROMAN_SEASONS[$match['numeral']]);
+        }
+
+        return [$name, null];
+    }
+
+    /**
+     * @return array{0: string, 1: int|null}
+     */
+    private function withoutMarker(string $name, string $base, int $season): array
+    {
+        $base = trim($base, " \t-_.:~|,");
+
+        return $base === '' || $season < 1 ? [$name, null] : [$base, $season];
     }
 
     private function version(?string $value): ?int

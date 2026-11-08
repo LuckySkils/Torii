@@ -39,6 +39,9 @@ const SP_DEMONS_CREST_01 = '[SubsPlease] Demons Crest - 01 (1080p) [BBBBBBBB].mk
 const SP_DEMONS_CREST_02 = '[SubsPlease] Demons Crest - 02 (1080p) [CCCCCCCC].mkv';
 const UNPARSED_TITLE = '[Erai-raws] Demons Crest [1080p][MultiSub]';
 
+/** The owner's wording (§16): one generic reason for every untrackable show or new target. */
+const BLOCKED_REASON = "No SubsPlease releases: Torii's download rule only follows SubsPlease's feed.";
+
 beforeEach(function () {
     Http::preventStrayRequests();
     config([
@@ -119,7 +122,7 @@ test('preview: items from several groups are grouped into series by their sugges
             'key' => 'tankchair|s1', 'parsedName' => 'TANK CHAIR', 'season' => 1, 'altTitles' => ['TANK CHAIR: Sensha Isu', 'Sensha Isu'],
             'groups' => ['ToonsHub'], 'target' => [
                 'kind' => 'new', 'name' => 'TANK CHAIR', 'trackable' => false,
-                'trackBlockedReason' => "No SubsPlease releases: Torii's download rule follows SubsPlease's feed, so there's nothing to track. Releases from ToonsHub were imported by hand.",
+                'trackBlockedReason' => BLOCKED_REASON,
             ],
         ]);
 
@@ -130,24 +133,24 @@ test('preview: items from several groups are grouped into series by their sugges
     ])->and($items['7'])->toMatchArray(['group' => 'ToonsHub', 'parsedName' => 'TANK CHAIR', 'season' => 1, 'episode' => '06'])
         ->and($items['1'])->toMatchArray(['group' => 'Erai-raws', 'parsedName' => 'Demons Crest', 'season' => null, 'episode' => '01'])
         ->and($items['8'])->toMatchArray(['state' => 'unparsed', 'selected' => false, 'seriesKey' => null, 'group' => 'Erai-raws'])
-        ->and($items['1'])->not->toHaveKeys(['crc', 'altTitles', 'publishedAtRaw', 'inQbit', 'known']);
+        ->and($items['1'])->not->toHaveKeys(['crc', 'altTitles', 'publishedAtRaw', 'inQbit', 'known', 'position']);
 
     // By series, SubsPlease first within an episode, unparsed last.
     expect(array_column($preview['items'], 'key'))->toBe(['6', '4', '5', '2', '1', '3', '7', '8']);
 });
 
-test('preview: the same episode from several groups keeps one (SubsPlease first), the others are duplicate_episode', function () {
+test('preview: the same episode and resolution from several groups: one is preselected (SubsPlease first), the others are duplicate_episode', function () {
     mixedFeed();
 
     $items = collect(nyaaPreview()['items'])->keyBy('key');
     $summary = fn (string $key) => [$items[$key]['state'], $items[$key]['selected'], $items[$key]['reason']];
 
     expect($summary('6'))->toBe(['new', true, null])
-        ->and($summary('4'))->toBe(['duplicate_episode', false, 'Episode 06 is also in the list from SubsPlease.'])
+        ->and($summary('4'))->toBe(['duplicate_episode', false, 'Another copy of episode 06 is selected (SubsPlease).'])
         ->and($summary('5'))->toBe(['new', true, null])
         // SubsPlease wins over Erai-raws' more-seeded copy.
         ->and($summary('2'))->toBe(['new', true, null])
-        ->and($summary('1'))->toBe(['duplicate_episode', false, 'Episode 01 is also in the list from SubsPlease.'])
+        ->and($summary('1'))->toBe(['duplicate_episode', false, 'Another copy of episode 01 is selected (SubsPlease).'])
         ->and($summary('7'))->toBe(['new', true, null]);
 });
 
@@ -162,7 +165,7 @@ test('preview: without SubsPlease, the trusted copy and then the most seeded one
     $items = collect(nyaaPreview()['items'])->keyBy('key');
 
     expect([$items['3']['state'], $items['2']['state'], $items['1']['state']])->toBe(['new', 'duplicate_episode', 'duplicate_episode'])
-        ->and($items['2']['reason'])->toBe('Episode 1 is also in the list from Judas.');
+        ->and($items['2']['reason'])->toBe('Another copy of episode 1 is selected (Judas).');
 });
 
 test('preview: superseded is per group: a v2 replaces the same group\'s v1 only', function () {
@@ -176,7 +179,7 @@ test('preview: superseded is per group: a v2 replaces the same group\'s v1 only'
 
     expect([$items['4']['state'], $items['4']['reason']])->toBe(['superseded', 'v2 of this episode is also in the list.'])
         ->and($items['6']['state'])->toBe('new')
-        ->and([$items['44']['state'], $items['44']['reason']])->toBe(['duplicate_episode', 'Episode 06 is also in the list from SubsPlease.']);
+        ->and([$items['44']['state'], $items['44']['reason']])->toBe(['duplicate_episode', 'Another copy of episode 06 is selected (SubsPlease).']);
 });
 
 test('preview: a batch covers its series\' episodes from any group', function () {
@@ -203,14 +206,14 @@ test('suggestion rules 1 and 2: an exact name, then a normalized name or alt tit
 
     $series = seriesByName(nyaaPreview());
 
-    expect($series['Black Clover S2']['target'])->toBe(['kind' => 'existing', 'showId' => $exact->id, 'showName' => 'Black Clover S2', 'trackable' => false])
+    expect($series['Black Clover S2']['target'])->toBe(['kind' => 'existing', 'showId' => $exact->id, 'showName' => 'Black Clover S2', 'trackable' => false, 'trackBlockedReason' => BLOCKED_REASON])
         ->and($series['Black Clover S2']['candidates'])->toBe([
             ['showId' => $exact->id, 'showName' => 'Black Clover S2', 'why' => "Named exactly 'Black Clover S2'.", 'score' => 100, 'trackable' => false],
         ])
         ->and($series['Demons Crest']['target'])->toMatchArray(['kind' => 'existing', 'showId' => $sameName->id])
         ->and($series['Demons Crest']['candidates'][0]['why'])->toBe("Same name as 'Demons Crest', ignoring case, punctuation and season wording.")
         ->and($series['Demons Crest']['candidates'][0]['score'])->toBe(95)
-        ->and($series['TANK CHAIR']['target'])->toBe(['kind' => 'existing', 'showId' => $alt->id, 'showName' => 'Sensha Isu', 'trackable' => true])
+        ->and($series['TANK CHAIR']['target'])->toBe(['kind' => 'existing', 'showId' => $alt->id, 'showName' => 'Sensha Isu', 'trackable' => true, 'trackBlockedReason' => null])
         ->and($series['TANK CHAIR']['candidates'][0]['why'])->toBe("Same name as the alt title 'Sensha Isu' in the release title.");
 });
 
@@ -221,7 +224,7 @@ test('suggestion rule 3: a clear anime winner with a linked show is the target; 
 
     $series = nyaaPreview()['series'][0];
 
-    expect($series['target'])->toBe(['kind' => 'existing', 'showId' => $winner->id, 'showName' => 'Tanku Cheaa', 'trackable' => false])
+    expect($series['target'])->toBe(['kind' => 'existing', 'showId' => $winner->id, 'showName' => 'Tanku Cheaa', 'trackable' => false, 'trackBlockedReason' => BLOCKED_REASON])
         ->and($series['candidates'])->toBe([
             ['showId' => $winner->id, 'showName' => 'Tanku Cheaa', 'why' => "AniList title 'Sensha Isu' of the linked anime.", 'score' => 100, 'trackable' => false],
             ['showId' => $runnerUp->id, 'showName' => 'Other Tank', 'why' => "AniList title 'Sensha Isuu' of the linked anime.", 'score' => 71, 'trackable' => false],
@@ -238,7 +241,7 @@ test('suggestion rule 3: close anime matches only become candidates; rejected pa
 
     $series = nyaaPreview()['series'][0];
 
-    expect($series['target'])->toBe(['kind' => 'new', 'name' => 'Demons Crest', 'trackable' => false, 'trackBlockedReason' => ERAI_ONLY_REASON])
+    expect($series['target'])->toBe(['kind' => 'new', 'name' => 'Demons Crest', 'trackable' => false, 'trackBlockedReason' => BLOCKED_REASON])
         ->and(array_column($series['candidates'], 'showId'))->toBe([$a->id, $b->id])
         ->and(array_column($series['candidates'], 'score'))->toBe([100, 100]);
 });
@@ -283,7 +286,7 @@ test('retarget: to an existing show, a new name, and a new name that already exi
     $updated = retarget($preview, 'blackclover|s2', ['showId' => $other->id])->assertOk()->json();
     $items = collect($updated['items'])->keyBy('key');
 
-    expect(seriesByName($updated)['Black Clover S2']['target'])->toBe(['kind' => 'existing', 'showId' => $other->id, 'showName' => 'Burakku Kurobaa S2', 'trackable' => true])
+    expect(seriesByName($updated)['Black Clover S2']['target'])->toBe(['kind' => 'existing', 'showId' => $other->id, 'showName' => 'Burakku Kurobaa S2', 'trackable' => true, 'trackBlockedReason' => null])
         ->and([$items['6']['state'], $items['4']['state'], $items['5']['state']])->toBe(['have_episode', 'have_episode', 'new'])
         ->and($items['6'])->not->toHaveKey('inQbit')
         ->and($updated['previewId'])->toBe($preview['previewId']);
@@ -420,8 +423,6 @@ test('confirm: have_episode is checked again; a show with the new name that appe
 
 // ── Trackability ─────────────────────────────────────────────────────────────
 
-const ERAI_ONLY_REASON = "No SubsPlease releases: Torii's download rule follows SubsPlease's feed, so there's nothing to track. Releases from Erai-raws were imported by hand.";
-
 function eraiOnlyShow(string $name = 'Demons Crest', array $attributes = []): Show
 {
     $show = metadataShow($name, ['rule_state' => RuleState::None, ...$attributes]);
@@ -438,36 +439,35 @@ test('trackability: shows without a SubsPlease release are not trackable, with t
     ShowAnimeLink::create(['show_id' => $erai->id, 'anime_id' => $anime->id, 'confidence' => 95, 'source' => 'auto', 'linked_at' => now()]);
     AnimeAiring::create(['anime_id' => $anime->id, 'episode' => 2, 'airs_at' => now()->addDay(), 'is_estimate' => false, 'provider' => 'anilist']);
 
-    expect($erai->trackability())->toBe(['trackable' => false, 'reason' => ERAI_ONLY_REASON])
+    expect($erai->trackability())->toBe(['trackable' => false, 'reason' => BLOCKED_REASON])
         ->and($subsPlease->trackability())->toBe(['trackable' => true, 'reason' => null]);
 
     $this->get('/shows')->assertInertia(fn ($page) => $page
         ->where('shows.data.0.name', 'Black Clover S2')->where('shows.data.0.trackable', true)->where('shows.data.0.trackBlockedReason', null)
-        ->where('shows.data.1.name', 'Demons Crest')->where('shows.data.1.trackable', false)->where('shows.data.1.trackBlockedReason', ERAI_ONLY_REASON));
+        ->where('shows.data.1.name', 'Demons Crest')->where('shows.data.1.trackable', false)->where('shows.data.1.trackBlockedReason', BLOCKED_REASON));
 
     $this->get("/shows/{$erai->id}")->assertInertia(fn ($page) => $page
-        ->where('show.trackable', false)->where('show.trackBlockedReason', ERAI_ONLY_REASON)
+        ->where('show.trackable', false)->where('show.trackBlockedReason', BLOCKED_REASON)
         ->where('releases.0.group', 'Erai-raws'));
 
     // The dashboard's LatestRelease (the page itself needs qBittorrent faked; DashboardControllerTest covers it).
     $latest = (new LatestReleaseResource(Release::where('show_id', $erai->id)->with('show')->firstOrFail()))->resolve();
     expect($latest['group'])->toBe('Erai-raws')
-        ->and($latest['show'])->toMatchArray(['trackable' => false, 'trackBlockedReason' => ERAI_ONLY_REASON]);
+        ->and($latest['show'])->toMatchArray(['trackable' => false, 'trackBlockedReason' => BLOCKED_REASON]);
 
     $this->get("/anime/{$anime->id}")->assertInertia(fn ($page) => $page
-        ->where('linkedShows.0.trackable', false)->where('linkedShows.0.trackBlockedReason', ERAI_ONLY_REASON));
+        ->where('linkedShows.0.trackable', false)->where('linkedShows.0.trackBlockedReason', BLOCKED_REASON));
 
-    $this->getJson("/anime/{$anime->id}/card")->assertJsonPath('linkedShow.trackable', false)->assertJsonPath('linkedShow.trackBlockedReason', ERAI_ONLY_REASON);
+    $this->getJson("/anime/{$anime->id}/card")->assertJsonPath('linkedShow.trackable', false)->assertJsonPath('linkedShow.trackBlockedReason', BLOCKED_REASON);
 
     $this->get('/schedule')->assertInertia(fn ($page) => $page
-        ->where('airings.0.show.trackable', false)->where('airings.0.show.trackBlockedReason', ERAI_ONLY_REASON));
+        ->where('airings.0.show.trackable', false)->where('airings.0.show.trackBlockedReason', BLOCKED_REASON));
 });
 
-test('trackability: a show with no releases at all names no groups', function () {
-    expect(metadataShow('Empty')->trackability())->toBe([
-        'trackable' => false,
-        'reason' => "No SubsPlease releases: Torii's download rule follows SubsPlease's feed, so there's nothing to track.",
-    ]);
+test('trackability: the reason is one generic text, the same for every show', function () {
+    expect(BLOCKED_REASON)->toBe(Show::BLOCKED_REASON)
+        ->and(metadataShow('Empty')->trackability())->toBe(['trackable' => false, 'reason' => BLOCKED_REASON])
+        ->and(eraiOnlyShow('Other')->trackability())->toBe(['trackable' => false, 'reason' => BLOCKED_REASON]);
 });
 
 test('trackability: tracking is refused with an error flash and nothing changes; bulk skips and says how many', function () {
@@ -478,14 +478,14 @@ test('trackability: tracking is refused with an error flash and nothing changes;
 
     $this->patch("/shows/{$erai->id}/track", ['tracked' => true])
         ->assertRedirect()
-        ->assertSessionHas('error', "Can't track \"Demons Crest\". ".ERAI_ONLY_REASON);
+        ->assertSessionHas('error', "Can't track \"Demons Crest\". ".BLOCKED_REASON);
 
     expect($erai->fresh())->is_tracked->toBeFalse()->rule_state->toBe(RuleState::None);
     Queue::assertNothingPushed();
 
     $this->post('/shows/track-bulk', ['ids' => [$erai->id, $subsPlease->id], 'tracked' => true])
         ->assertRedirect()
-        ->assertSessionHas('success', "Tracking 1 shows. Skipped 1 with no SubsPlease releases: Torii's download rule follows SubsPlease's feed.");
+        ->assertSessionHas('success', 'Tracking 1 shows. Skipped 1. '.BLOCKED_REASON);
 
     expect($erai->fresh()->is_tracked)->toBeFalse()
         ->and($subsPlease->fresh()->is_tracked)->toBeTrue();
@@ -513,8 +513,8 @@ test('trackability over MCP: list_shows and get_show carry it, track_show refuse
     $erai = eraiOnlyShow();
 
     expect(mcpTool('list_shows')['results'][0])->toMatchArray(['id' => $erai->id, 'trackable' => false])
-        ->and(mcpTool('get_show', ['show_id' => $erai->id]))->toMatchArray(['trackable' => false, 'trackBlockedReason' => ERAI_ONLY_REASON])
-        ->and(mcpToolError('track_show', ['show_id' => $erai->id]))->toBe("Can't track \"Demons Crest\". ".ERAI_ONLY_REASON)
+        ->and(mcpTool('get_show', ['show_id' => $erai->id]))->toMatchArray(['trackable' => false, 'trackBlockedReason' => BLOCKED_REASON])
+        ->and(mcpToolError('track_show', ['show_id' => $erai->id]))->toBe("Can't track \"Demons Crest\". ".BLOCKED_REASON)
         ->and($erai->fresh()->is_tracked)->toBeFalse();
 });
 
@@ -532,4 +532,104 @@ test('the release_group backfill: feed rows are SubsPlease, Nyaa rows their pars
 
     expect([$feed->fresh()->release_group, $erai->fresh()->release_group, $sp->fresh()->release_group, $unparsed->fresh()->release_group, $kept->fresh()->release_group])
         ->toBe(['SubsPlease', 'Erai-raws', 'SubsPlease', null, 'Judas']);
+});
+
+// ── Live nyaa.si titles (Erai-raws RSS, captured on the test stand 2026-11-08) ─
+
+const ERAI_AO_ASHI_06_HEVC = '[Erai-raws] Ao Ashi Season 2 - 06 [1080p CR WEBRip HEVC AAC][MultiSub][1211C3AE]';
+const ERAI_AO_ASHI_06_AVC = '[Erai-raws] Ao Ashi Season 2 - 06 [1080p CR WEB-DL AVC AAC][MultiSub][465C6C16]';
+const ERAI_AO_NO_HAKO_05_HEVC = '[Erai-raws] Ao no Hako Season 2 - 05 [1080p NF WEBRip HEVC EAC3][MultiSub][EDB9FC02]';
+const ERAI_HYOUKEN_05_HEVC = '[Erai-raws] Hyouken no Majutsushi ga Sekai o Suberu II - 05 [1080p CR WEBRip HEVC AAC][MultiSub][689980CD]';
+const ERAI_HYOUKEN_05_AVC = '[Erai-raws] Hyouken no Majutsushi ga Sekai o Suberu II - 05 [1080p CR WEB-DL AVC AAC][MultiSub][E3D687FE]';
+
+test('real title (Erai-raws, live nyaa.si 2026-11-08): one group\'s HEVC and AVC copies of an episode: exactly one is preselected', function () {
+    fakeNyaa([
+        ['title' => ERAI_AO_ASHI_06_HEVC, 'id' => 1, 'hash' => hashFor('hevc'), 'seeders' => 30],
+        ['title' => ERAI_AO_ASHI_06_AVC, 'id' => 2, 'hash' => hashFor('avc'), 'seeders' => 30],
+        // Constructed: a 720p copy is a different resolution, so it isn't a copy of the same file.
+        ['title' => '[Erai-raws] Ao Ashi Season 2 - 06 [720p CR WEB-DL AVC AAC][MultiSub][ABCDEF01]', 'id' => 3, 'hash' => hashFor('720')],
+    ]);
+
+    $preview = nyaaPreview();
+    $items = collect($preview['items'])->keyBy('key');
+
+    expect([$items['1']['state'], $items['1']['selected'], $items['1']['reason']])->toBe(['new', true, null])
+        ->and([$items['2']['state'], $items['2']['selected'], $items['2']['reason']])->toBe(['duplicate_episode', false, 'Another copy of episode 06 is selected (Erai-raws).'])
+        ->and([$items['3']['state'], $items['3']['selected']])->toBe(['new', true])
+        ->and($preview['series'][0])->toMatchArray(['suggestedName' => 'Ao Ashi S2', 'parsedName' => 'Ao Ashi', 'season' => 2]);
+});
+
+test('real title (Erai-raws, live nyaa.si 2026-11-08): with more seeders on the second copy, that one is preselected', function () {
+    fakeNyaa([
+        ['title' => ERAI_AO_ASHI_06_HEVC, 'id' => 1, 'hash' => hashFor('hevc'), 'seeders' => 10],
+        ['title' => ERAI_AO_ASHI_06_AVC, 'id' => 2, 'hash' => hashFor('avc'), 'seeders' => 90],
+    ]);
+
+    $items = collect(nyaaPreview()['items'])->keyBy('key');
+
+    expect([$items['1']['state'], $items['2']['state'], $items['2']['selected']])->toBe(['duplicate_episode', 'new', true]);
+});
+
+test('real title (Erai-raws, live nyaa.si 2026-11-08): "Season 2" in the name suggests the SubsPlease-style show, found by its exact name', function () {
+    $show = metadataShow('Ao no Hako S2');
+    heldRelease($show, '01');
+    fakeNyaa([['title' => ERAI_AO_NO_HAKO_05_HEVC, 'id' => 1, 'hash' => hashFor('hako')]]);
+
+    $series = nyaaPreview()['series'][0];
+
+    expect($series)->toMatchArray(['key' => 'aonohako|s2', 'suggestedName' => 'Ao no Hako S2', 'season' => 2])
+        ->and($series['target'])->toBe(['kind' => 'existing', 'showId' => $show->id, 'showName' => 'Ao no Hako S2', 'trackable' => true, 'trackBlockedReason' => null])
+        ->and($series['candidates'][0]['why'])->toBe("Named exactly 'Ao no Hako S2'.");
+});
+
+test('real title (Erai-raws, live nyaa.si 2026-11-08): Hyouken II finds the SubsPlease "wo" show: the particle folds, the roman II is the season', function () {
+    // As on the test stand: SubsPlease's show, linked to AniList's entry with "wo".
+    $anime = metadataAnime(['title_romaji' => 'Hyouken no Majutsushi ga Sekai wo Suberu II']);
+    $show = mcpLinkedShow($anime, 'Hyouken no Majutsushi ga Sekai wo Suberu S2');
+    heldRelease($show, '04');
+    fakeNyaa([
+        ['title' => ERAI_HYOUKEN_05_HEVC, 'id' => 1, 'hash' => hashFor('hevc')],
+        ['title' => ERAI_HYOUKEN_05_AVC, 'id' => 2, 'hash' => hashFor('avc')],
+    ]);
+
+    $series = nyaaPreview()['series'][0];
+
+    // Before the fold this was a new show with the show as a similarity candidate (81).
+    expect($series)->toMatchArray(['suggestedName' => 'Hyouken no Majutsushi ga Sekai o Suberu S2', 'season' => 2])
+        ->and($series['target'])->toBe([
+            'kind' => 'existing', 'showId' => $show->id, 'showName' => 'Hyouken no Majutsushi ga Sekai wo Suberu S2', 'trackable' => true, 'trackBlockedReason' => null,
+        ])
+        ->and($series['candidates'])->toBe([[
+            'showId' => $show->id, 'showName' => 'Hyouken no Majutsushi ga Sekai wo Suberu S2',
+            'why' => "Same name as 'Hyouken no Majutsushi ga Sekai o Suberu S2', ignoring case, punctuation and season wording.", 'score' => 95, 'trackable' => true,
+        ]]);
+});
+
+// ── Target decision: a single candidate >= 90 with no runner-up within 10 ────
+
+test('target: a lone strong anime candidate wins even when an unlinked anime scores as high', function () {
+    // Constructed: two anime both named "Sensha Isu", only one linked. Before, the anime-level tie blocked it.
+    $linked = mcpLinkedShow(metadataAnime(['title_romaji' => 'Sensha Isu']), 'Tanku Cheaa');
+    metadataAnime(['title_romaji' => 'Sensha Isu', 'title_english' => 'Tank Chair (unlinked)']);
+    fakeNyaa([['title' => TOONSHUB_S01E06, 'id' => 7, 'hash' => hashFor('toons-06')]]);
+
+    expect(nyaaPreview()['series'][0]['target'])->toMatchArray(['kind' => 'existing', 'showId' => $linked->id]);
+});
+
+test('target: two close candidates from any rule give a new show; an exact name still wins over a close one', function () {
+    // Constructed show names that normalize like "Demons Crest" (rule 2, 95 each).
+    $a = metadataShow("Demon's Crest!", ['slug' => 'demons-crest-a']);
+    $b = metadataShow('DEMONS-CREST', ['slug' => 'demons-crest-b']);
+    fakeNyaa([['title' => ERAI_01, 'id' => 1, 'hash' => hashFor('erai-01')]]);
+
+    $series = nyaaPreview()['series'][0];
+
+    expect($series['target'])->toMatchArray(['kind' => 'new', 'name' => 'Demons Crest'])
+        ->and(collect($series['candidates'])->pluck('showId')->sort()->values()->all())->toBe([$a->id, $b->id]);
+
+    $exact = metadataShow('Demons Crest', ['slug' => 'demons-crest-exact']);
+    $series = nyaaPreview()['series'][0];
+
+    expect($series['target'])->toMatchArray(['kind' => 'existing', 'showId' => $exact->id])
+        ->and($series['candidates'][0])->toMatchArray(['showId' => $exact->id, 'score' => 100]);
 });

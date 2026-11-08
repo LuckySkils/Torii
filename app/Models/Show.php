@@ -90,10 +90,12 @@ class Show extends Model
         return $this->hasMany(ShowAnimeRejection::class);
     }
 
+    /** The one reason an untrackable show gives, the same for every show (§16). */
+    public const BLOCKED_REASON = "No SubsPlease releases: Torii's download rule only follows SubsPlease's feed.";
+
     /**
-     * Adds what trackability() needs, as two subqueries (no N+1 in lists):
-     * whether the show has a SubsPlease release, and the groups its releases
-     * come from (for the reason).
+     * Adds what trackability() needs as one `exists` subquery (no N+1 in lists):
+     * whether the show has a SubsPlease release.
      *
      * @param  Builder<Show>  $query
      */
@@ -103,14 +105,7 @@ class Show extends Model
             $query->select($query->qualifyColumn('*'));
         }
 
-        $query
-            ->withExists(['releases as has_subsplease_release' => fn (Builder $releases) => self::subsPleaseReleases($releases)])
-            ->selectSub(
-                Release::query()
-                    ->selectRaw('json_agg(distinct release_group)')
-                    ->whereColumn('releases.show_id', $this->qualifyColumn('id')),
-                'release_groups',
-            );
+        $query->withExists(['releases as has_subsplease_release' => fn (Builder $releases) => self::subsPleaseReleases($releases)]);
     }
 
     /**
@@ -127,38 +122,18 @@ class Show extends Model
             return ['trackable' => true, 'reason' => null];
         }
 
-        if (array_key_exists('has_subsplease_release', $this->attributes)) {
-            $hasSubsPlease = (bool) $this->attributes['has_subsplease_release'];
-            $groups = json_decode((string) ($this->attributes['release_groups'] ?? 'null'), true);
-        } else {
-            $hasSubsPlease = self::subsPleaseReleases($this->releases()->getQuery())->exists();
-            $groups = $hasSubsPlease ? [] : $this->releases()->distinct()->pluck('release_group')->all();
-        }
+        $hasSubsPlease = array_key_exists('has_subsplease_release', $this->attributes)
+            ? (bool) $this->attributes['has_subsplease_release']
+            : self::subsPleaseReleases($this->releases()->getQuery())->exists();
 
-        if ($hasSubsPlease) {
-            return ['trackable' => true, 'reason' => null];
-        }
-
-        return ['trackable' => false, 'reason' => self::blockedReason(is_array($groups) ? $groups : [])];
+        return $hasSubsPlease
+            ? ['trackable' => true, 'reason' => null]
+            : ['trackable' => false, 'reason' => self::blockedReason()];
     }
 
-    /**
-     * @param  array<int, string|null>  $groups  the groups of the show's releases (null = unknown)
-     */
-    public static function blockedReason(array $groups): string
+    public static function blockedReason(): string
     {
-        $reason = "No SubsPlease releases: Torii's download rule follows SubsPlease's feed, so there's nothing to track.";
-        $named = array_values(array_unique(array_filter($groups, fn ($group) => is_string($group) && $group !== '')));
-        sort($named, SORT_NATURAL | SORT_FLAG_CASE);
-
-        if ($named !== []) {
-            $last = array_pop($named);
-            $list = $named === [] ? $last : implode(', ', $named).' and '.$last;
-
-            return "{$reason} Releases from {$list} were imported by hand.";
-        }
-
-        return $groups === [] ? $reason : "{$reason} Its releases were imported by hand.";
+        return self::BLOCKED_REASON;
     }
 
     /**

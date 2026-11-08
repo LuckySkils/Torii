@@ -26,8 +26,8 @@ use Throwable;
  * the infohash), `known_release` (Torii has already sent or downloaded it),
  * `have_episode` (the target show already has that episode from any group),
  * `superseded` (a higher version from the same group is in the list),
- * `duplicate_episode` (the same episode from another group is in the list and
- * kept instead), otherwise `new`. Remakes and episodes covered by a batch of the
+ * `duplicate_episode` (another copy of the same episode and resolution, from any
+ * group or encode, is the one preselected), otherwise `new`. Remakes and episodes covered by a batch of the
  * series stay `new` but unselected, with the reason. States depend on the
  * target, so they're recomputed on every retarget.
  */
@@ -36,7 +36,7 @@ final class NyaaImportPreviews
     private const CACHE_PREFIX = 'nyaa-import:preview:';
 
     /** Stored with each item, never sent to the browser. */
-    private const INTERNAL_ITEM_FIELDS = ['publishedAtRaw', 'crc', 'altTitles', 'inQbit', 'known'];
+    private const INTERNAL_ITEM_FIELDS = ['publishedAtRaw', 'crc', 'altTitles', 'inQbit', 'known', 'position'];
 
     public function __construct(
         private readonly NyaaClient $client,
@@ -59,7 +59,7 @@ final class NyaaImportPreviews
 
         $items = [];
         foreach ($feed['items'] as $index => $item) {
-            $row = $this->row($item);
+            $row = [...$this->row($item), 'position' => $index];
             $key = $row['key'] ?? 'item-'.$index;
             $row['key'] = isset($items[$key]) ? $key.'-'.$index : $key;
             $items[$row['key']] = $row;
@@ -386,30 +386,30 @@ final class NyaaImportPreviews
             };
         }
 
-        // The same episode of a series from several groups: keep one (SubsPlease, then trusted, then most seeders).
+        // Several copies of one episode and resolution in a series (other groups, or one group's
+        // HEVC and AVC encodes): preselect exactly one, deterministically (not a remake, SubsPlease,
+        // trusted, most seeders, then first in the feed). Which one doesn't matter much: the user decides.
         $buckets = [];
         foreach ($items as $key => $item) {
             if ($states[$key] === null && ! $item['isBatch'] && $item['episode'] !== null) {
-                $buckets[$item['seriesKey'].'|'.$episodeOf($item)][] = $item;
+                $buckets[$item['seriesKey'].'|'.$episodeOf($item).'|'.$item['resolution']][] = $item;
             }
         }
 
         foreach ($buckets as $bucket) {
-            if (count(array_unique(array_map(fn (array $item) => (string) $item['group'], $bucket))) < 2) {
+            if (count($bucket) < 2) {
                 continue;
             }
 
             usort($bucket, fn (array $a, array $b) => [
-                $a['remake'], $a['group'] !== ReleaseTitleParser::SUBSPLEASE, ! $a['trusted'], -$a['seeders'], $a['key'],
+                $a['remake'], $a['group'] !== ReleaseTitleParser::SUBSPLEASE, ! $a['trusted'], -$a['seeders'], $a['position'] ?? 0,
             ] <=> [
-                $b['remake'], $b['group'] !== ReleaseTitleParser::SUBSPLEASE, ! $b['trusted'], -$b['seeders'], $b['key'],
+                $b['remake'], $b['group'] !== ReleaseTitleParser::SUBSPLEASE, ! $b['trusted'], -$b['seeders'], $b['position'] ?? 0,
             ]);
             $kept = $bucket[0];
 
-            foreach ($bucket as $item) {
-                if ($item['group'] !== $kept['group']) {
-                    $states[$item['key']] = ['duplicate_episode', "Episode {$item['episode']} is also in the list from ".($kept['group'] ?? 'another group').'.'];
-                }
+            foreach (array_slice($bucket, 1) as $item) {
+                $states[$item['key']] = ['duplicate_episode', "Another copy of episode {$item['episode']} is selected".($kept['group'] !== null ? " ({$kept['group']})" : '').'.'];
             }
         }
 

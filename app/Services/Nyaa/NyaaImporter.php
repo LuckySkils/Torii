@@ -73,7 +73,15 @@ final class NyaaImporter
 
         foreach (array_unique($keys) as $key) {
             $item = $items[$key];
-            $target = $item['seriesKey'] === null ? null : ($targets[$item['seriesKey']] ?? null);
+
+            // Unparsed items are never imported (no show, no episode to file them under).
+            if ($item['seriesKey'] === null) {
+                $skipped[] = ['key' => $key, 'title' => $item['title'], 'reason' => "Torii couldn't read a show and episode from this title, so it can't be imported."];
+
+                continue;
+            }
+
+            $target = $targets[$item['seriesKey']] ?? null;
 
             try {
                 $result = $this->release($item, $target, $held, $shows);

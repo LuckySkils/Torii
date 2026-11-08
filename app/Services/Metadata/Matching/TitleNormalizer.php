@@ -103,6 +103,9 @@ final class TitleNormalizer
         $value = preg_replace_callback('/\p{Latin}+/u', fn (array $m) => Str::ascii($m[0]), $value) ?? $value;
         $value = mb_strtolower($value);
         $value = preg_replace('/[^\p{L}\p{N}]+/u', ' ', $value) ?? $value;
+        // The particle を is romanized "wo" or "o" ("Sekai wo Suberu" / "Sekai o Suberu"):
+        // fold the standalone word only, never inside one ("world", "wolf", "kowai").
+        $value = preg_replace('/(?<![\p{L}\p{N}])wo(?![\p{L}\p{N}])/u', 'o', $value) ?? $value;
 
         return $this->collapse($value);
     }

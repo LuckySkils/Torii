@@ -18,15 +18,17 @@ use Illuminate\Validation\ValidationException;
 /**
  * Where each parsed series of a Nyaa import goes (§16): the suggested target
  * show and the candidates the user can pick from. Local data only, no provider
- * calls. First hit wins as the target, every hit is a candidate:
+ * calls. Candidates (one per show, its best hit) come from:
  *
- *  1. a show named exactly the suggested name;
+ *  1. a show named exactly the suggested name (100);
  *  2. a show whose normalized name (TitleNormalizer: case, punctuation, season
- *     wording) equals the suggested name or an alt title (+ season);
+ *     wording) equals the suggested name or an alt title (+ season) (95);
  *  3. anime matching (AnimeMatcher) of the suggested name and alt titles against
- *     stored anime: a clear winner (>= 90, runner-up >= 10 lower, as §11) with a
- *     linked show gives that show; every scored anime's linked shows are candidates;
- *  4. otherwise a new show with the suggested name.
+ *     stored anime: every anime scoring >= 70 offers its linked shows (its score).
+ *
+ * The target is the exact-name show; else the single candidate scoring >= 90
+ * with no other candidate within 10 (§11's decision rule), whichever rule
+ * produced it; else a new show with the suggested name.
  *
  * Rejected show/anime pairs (show_anime_rejections) never offer that show
  * through that anime.
@@ -92,20 +94,31 @@ final class SeriesTargets
                 }
             }
         }
-        $hits = [...$hits, ...$sameName];
-        $target ??= $sameName[0]['showId'] ?? null;
-
         // 3. Anime matching.
-        [$animeHits, $winner] = $this->animeMatches($normalizedQueries);
-        $hits = [...$hits, ...$animeHits];
-        $target ??= $winner;
+        $hits = [...$hits, ...$sameName, ...$this->animeMatches($normalizedQueries)];
 
-        $candidates = [];
+        // One candidate per show (its best hit), best first; ties keep the rule order.
+        $best = [];
         foreach ($hits as $hit) {
-            $candidates[$hit['showId']] ??= $hit;
+            if (! isset($best[$hit['showId']]) || $hit['score'] > $best[$hit['showId']]['score']) {
+                $best[$hit['showId']] = $hit;
+            }
+        }
+        $ranked = array_values($best);
+        usort($ranked, fn (array $a, array $b) => $b['score'] <=> $a['score']);
+
+        // Without an exact name: a single candidate >= 90 with no runner-up within 10, whichever rule produced it.
+        $top = $ranked[0] ?? null;
+        $runnerUp = $ranked[1] ?? null;
+
+        if ($target === null
+            && $top !== null
+            && $top['score'] >= AnimeMatcher::AUTO_LINK_MIN_SCORE
+            && ($runnerUp === null || $top['score'] - $runnerUp['score'] >= AnimeMatcher::AUTO_LINK_MIN_MARGIN)) {
+            $target = $top['showId'];
         }
 
-        $candidates = array_slice(array_values($candidates), 0, self::MAX_CANDIDATES);
+        $candidates = array_slice($ranked, 0, self::MAX_CANDIDATES);
 
         return [
             // describe() completes both kinds (names, trackability).
@@ -234,11 +247,19 @@ final class SeriesTargets
     }
 
     /**
-     * @return array{kind: 'existing', showId: int, showName: string, trackable: bool}
+     * @return array{kind: 'existing', showId: int, showName: string, trackable: bool, trackBlockedReason: string|null}
      */
     public static function existingTarget(Show $show): array
     {
-        return ['kind' => 'existing', 'showId' => $show->id, 'showName' => $show->name, 'trackable' => $show->trackability()['trackable']];
+        $trackability = $show->trackability();
+
+        return [
+            'kind' => 'existing',
+            'showId' => $show->id,
+            'showName' => $show->name,
+            'trackable' => $trackability['trackable'],
+            'trackBlockedReason' => $trackability['reason'],
+        ];
     }
 
     /**
@@ -257,7 +278,7 @@ final class SeriesTargets
             'kind' => 'new',
             'name' => $name,
             'trackable' => $trackable,
-            'trackBlockedReason' => $trackable ? null : Show::blockedReason($groups),
+            'trackBlockedReason' => $trackable ? null : Show::blockedReason(),
         ];
     }
 
@@ -272,7 +293,7 @@ final class SeriesTargets
 
     /**
      * @param  array<int, array{query: string, alt: string|null, normalized: NormalizedTitle}>  $queries
-     * @return array{0: array<int, array{showId: int, why: string, score: int}>, 1: int|null} candidates, and the clear winner's show
+     * @return array<int, array{showId: int, why: string, score: int}> every scored anime's linked shows
      */
     private function animeMatches(array $queries): array
     {
@@ -296,16 +317,6 @@ final class SeriesTargets
 
         usort($scored, fn (array $a, array $b) => [$b['score'], $a['animeId']] <=> [$a['score'], $b['animeId']]);
 
-        $top = $scored[0] ?? null;
-        $runnerUp = $scored[1] ?? null;
-        $winner = null;
-
-        if ($top !== null
-            && $top['score'] >= AnimeMatcher::AUTO_LINK_MIN_SCORE
-            && ($runnerUp === null || $top['score'] - $runnerUp['score'] >= AnimeMatcher::AUTO_LINK_MIN_MARGIN)) {
-            $winner = $this->primaryShow($this->linkedShows()[$top['animeId']] ?? []);
-        }
-
         $hits = [];
         foreach ($scored as $match) {
             foreach ($this->linkedShows()[$match['animeId']] ?? [] as $showId) {
@@ -313,7 +324,7 @@ final class SeriesTargets
             }
         }
 
-        return [$hits, $winner];
+        return $hits;
     }
 
     /**
@@ -339,19 +350,6 @@ final class SeriesTargets
         }
 
         return $entry['candidate']->label;
-    }
-
-    /**
-     * Of an anime's linked shows: a tracked one first, then the oldest.
-     *
-     * @param  array<int, int>  $showIds
-     */
-    private function primaryShow(array $showIds): ?int
-    {
-        $shows = array_filter($this->shows(), fn (array $show) => in_array($show['id'], $showIds, true));
-        usort($shows, fn (array $a, array $b) => [$b['isTracked'], $a['id']] <=> [$a['isTracked'], $b['id']]);
-
-        return $shows[0]['id'] ?? null;
     }
 
     /**

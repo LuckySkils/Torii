@@ -128,7 +128,9 @@ test('constructed: episode shapes', function (string $title, array $expected) {
     'bare E06' => ['[Grp] Demons Crest E06 [1080p]', ['Grp', 'Demons Crest', null, '06', null, '1080p', null, false]],
     'tags before the name' => ['[Grp][1080p] Demons Crest - 04', ['Grp', 'Demons Crest', null, '04', null, '1080p', null, false]],
     'dashes in the name' => ['[Erai-raws] Re:Zero - Starting Life in Another World - 05 [1080p]', ['Erai-raws', 'Re:Zero - Starting Life in Another World', null, '05', null, '1080p', null, false]],
-    'season words stay in the name' => ['[Erai-raws] Ao Ashi 2nd Season - 05 [1080p]', ['Erai-raws', 'Ao Ashi 2nd Season', null, '05', null, '1080p', null, false]],
+    'season words at the end of the name are the season' => ['[Grp] Ao Ashi 2nd Season - 05 [1080p]', ['Grp', 'Ao Ashi', 2, '05', null, '1080p', null, false]],
+    'season words inside the name stay' => ['[Grp] Ao Ashi Season 2 Part 2 - 05 [1080p]', ['Grp', 'Ao Ashi Season 2 Part 2', null, '05', null, '1080p', null, false]],
+    'a lowercase trailing roman word stays' => ['[Grp] Hoshi no Kodama ii - 05 [1080p]', ['Grp', 'Hoshi no Kodama ii', null, '05', null, '1080p', null, false]],
     'a number in the name' => ['[Grp] Mob Psycho 100 - 02 [1080p]', ['Grp', 'Mob Psycho 100', null, '02', null, '1080p', null, false]],
     'no group' => ['Black Clover - S02E06 [1080p]', [null, 'Black Clover', 2, '06', null, '1080p', null, false]],
     'no resolution' => ['[Grp] Demons Crest - 08', ['Grp', 'Demons Crest', null, '08', null, null, null, false]],
@@ -149,6 +151,44 @@ test('constructed: batch shapes', function (string $title, array $expected) {
     'Batch token' => ['[Grp] Demons Crest [1080p][Batch]', ['Grp', 'Demons Crest', null, null, true, null, null, '1080p']],
     'loose Batch word' => ['[Grp] Demons Crest Batch 1080p', ['Grp', 'Demons Crest', null, null, true, null, null, '1080p']],
 ]);
+
+// ── Real titles from live nyaa.si (Erai-raws RSS, captured on the test stand 2026-11-08) ─
+
+test('real title (Erai-raws, live nyaa.si 2026-11-08): a season written in words at the end of the name is the season', function (string $title, string $name, ?int $season, string $episode, string $suggested) {
+    $parsed = $this->parser->parse($title);
+
+    expect([$parsed->group, $parsed->name, $parsed->season, $parsed->episode, $parsed->resolution, $parsed->suggestedShowName()])
+        ->toBe(['Erai-raws', $name, $season, $episode, '1080p', $suggested]);
+})->with([
+    'Season 2' => ['[Erai-raws] Ao no Hako Season 2 - 05 [1080p NF WEBRip HEVC EAC3][MultiSub][EDB9FC02]', 'Ao no Hako', 2, '05', 'Ao no Hako S2'],
+    'Roman II' => ['[Erai-raws] Hyouken no Majutsushi ga Sekai o Suberu II - 05 [1080p CR WEBRip HEVC AAC][MultiSub][689980CD]', 'Hyouken no Majutsushi ga Sekai o Suberu', 2, '05', 'Hyouken no Majutsushi ga Sekai o Suberu S2'],
+    '2nd Season' => ['[Erai-raws] Black Clover 2nd Season - 06 [1080p CR WEBRip HEVC AAC][MultiSub][070972B6]', 'Black Clover', 2, '06', 'Black Clover S2'],
+    '3rd Season' => ['[Erai-raws] Kusuriya no Hitorigoto 3rd Season - 06 [1080p CR WEB-DL AVC AAC][MultiSub][596964D3]', 'Kusuriya no Hitorigoto', 3, '06', 'Kusuriya no Hitorigoto S3'],
+    'S3' => ['[Erai-raws] Tensei Kizoku, Kantei Skill de Nariagaru S3 - 07 [1080p CR WEB-DL AVC AAC][MultiSub][30FB2CD9]', 'Tensei Kizoku, Kantei Skill de Nariagaru', 3, '07', 'Tensei Kizoku, Kantei Skill de Nariagaru S3'],
+    'after a year' => ['[Erai-raws] Ranma 1/2 (2024) 3rd Season - 06 [1080p NF WEBRip HEVC AAC][MultiSub][237BC714]', 'Ranma 1/2 (2024)', 3, '06', 'Ranma 1/2 (2024) S3'],
+    'Season 2 of Hotel Inhumans' => ['[Erai-raws] Hotel Inhumans Season 2 - 06 [1080p CR WEB-DL AVC AAC][MultiSub][3451514B]', 'Hotel Inhumans', 2, '06', 'Hotel Inhumans S2'],
+]);
+
+test('real title (Erai-raws, live nyaa.si 2026-11-08): markers not at the end of the name, years and long episode numbers stay as they are', function (string $title, string $name, ?int $season, string $episode) {
+    $parsed = $this->parser->parse($title);
+
+    expect([$parsed->name, $parsed->season, $parsed->episode, $parsed->suggestedShowName()])->toBe([$name, $season, $episode, $name]);
+})->with([
+    '2nd Season Part 2' => ['[Erai-raws] Yozakura-san Chi no Daisakusen 2nd Season Part 2 - 05 [1080p DSNP WEBRip HEVC AAC][MultiSub][94901D8A]', 'Yozakura-san Chi no Daisakusen 2nd Season Part 2', null, '05'],
+    'Act II Second Season Part 2' => ['[Erai-raws] Diamond no Ace: Act II Second Season Part 2 - 05 [1080p CR WEBRip HEVC AAC][MultiSub][E7AFC5CE]', 'Diamond no Ace: Act II Second Season Part 2', null, '05'],
+    'a year in parentheses' => ['[Erai-raws] Keroro Gunsou (2026) - 06 [1080p CR WEBRip HEVC AAC][MultiSub][307CEB03]', 'Keroro Gunsou (2026)', null, '06'],
+    'a four-digit episode' => ['[Erai-raws] Detective Conan - 1219 [1080p CR WEBRip HEVC AAC][MultiSub][D32BF739]', 'Detective Conan', null, '1219'],
+]);
+
+test('real title (Erai-raws, live nyaa.si 2026-11-08): the HEVC and AVC copies of one episode read the same', function () {
+    $hevc = $this->parser->parse('[Erai-raws] Ao Ashi Season 2 - 06 [1080p CR WEBRip HEVC AAC][MultiSub][1211C3AE]');
+    $avc = $this->parser->parse('[Erai-raws] Ao Ashi Season 2 - 06 [1080p CR WEB-DL AVC AAC][MultiSub][465C6C16]');
+
+    expect([$hevc->name, $hevc->season, $hevc->episode, $hevc->version, $hevc->resolution, $hevc->suggestedShowName()])
+        ->toBe([$avc->name, $avc->season, $avc->episode, $avc->version, $avc->resolution, $avc->suggestedShowName()])
+        ->toBe(['Ao Ashi', 2, '06', null, '1080p', 'Ao Ashi S2'])
+        ->and([$hevc->crc, $avc->crc])->toBe(['1211C3AE', '465C6C16']);
+});
 
 test('constructed: a season pack suggests the later-season show name', function () {
     expect($this->parser->parse('[Judas] Black Clover S02 [1080p]')->suggestedShowName())->toBe('Black Clover S2')
