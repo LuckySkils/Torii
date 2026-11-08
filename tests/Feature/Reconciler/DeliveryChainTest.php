@@ -846,6 +846,29 @@ test('a link that never appears gives up after the last check, without sending f
     Queue::assertPushed(SendNotification::class, fn ($job) => $job->kind === NotificationKind::DeliveryGaveUp && $job->releaseId === $release->id);
 });
 
+test('while the delivery\'s Shoko series is unknown, the link messages say "its series"', function () {
+    fakeShoko([]);
+    fakeJellyfin([false]);
+    downloaded();
+
+    foreach (shokoCapture() as $message) {
+        listen('shoko', $message);
+    }
+    drain(hold: [CheckShokoLink::class]);
+    psyrenDelivery()->update(['shoko_series_id' => null]); // constructed: no series known when the link is checked
+
+    app(DeliveryReconciler::class)->checkShokoLink(psyrenDelivery()->id, psyrenDelivery()->run, 1);
+
+    expect(psyrenDelivery())->state->toBe(DeliveryState::AwaitingLink)
+        ->last_error->toBe("Shoko hasn't linked file 2553 to its series yet.");
+
+    drain();
+
+    expect(psyrenDelivery())->state->toBe(DeliveryState::GaveUp)
+        ->last_error->toBe("Failure A: Shoko didn't link file 2553 to its series within 30 minutes, so the Anime library refresh was not sent.")
+        ->and(jellyfinWrites())->toBe([]);
+});
+
 test('when Shoko can\'t be asked, the give-up reason says so', function () {
     Http::fake(['http://shoko.test/*' => Http::response('', 503)]);
     fakeJellyfin([false]);

@@ -12,10 +12,11 @@ use Throwable;
  * Shoko's REST API, the one read the reconciler needs (§17): which series a
  * file is cross-referenced to. Auth: the `apikey` header.
  *
- * `GET /api/v3/File/{id}` was verified to answer; its cross-reference shape
- * isn't captured yet, so the reader accepts v3's `SeriesIDs[].SeriesID.ID` and
- * the event-style `CrossReferences[].SeriesID`. RECONCILER_DEBUG logs the raw
- * response so the shape can be confirmed.
+ * `GET /api/v3/File/{id}` for a linked file answers `SeriesIDs[].SeriesID.ID`
+ * (production capture: tests/Fixtures/reconciler/shoko_file_2721_xrefs.json);
+ * the event-style `CrossReferences[].SeriesID` is still accepted. The unlinked
+ * shape isn't captured, so series ids ≤ 0 or non-numeric count as not linked.
+ * RECONCILER_DEBUG logs the raw response.
  */
 final class ShokoClient
 {
@@ -38,7 +39,7 @@ final class ShokoClient
         }
 
         if (config('subtracker.reconciler.debug')) {
-            logger()->info('Reconciler debug: Shoko file lookup', ['fileId' => $fileId, 'status' => $response->status(), 'body' => mb_substr($response->body(), 0, 2000)]);
+            logger()->info('Reconciler debug: Shoko file lookup', ['fileId' => $fileId, 'status' => $response->status(), 'body' => mb_substr($response->body(), 0, 20000)]);
         }
 
         if (! $response->successful()) {
@@ -63,7 +64,8 @@ final class ShokoClient
             $series = is_array($xref) ? ($xref['SeriesID'] ?? null) : null;
             $series = is_array($series) ? ($series['ID'] ?? null) : $series;
 
-            if (is_numeric($series)) {
+            // The unlinked shape isn't captured: a 0/null/absent series id means "not linked yet".
+            if (is_numeric($series) && (int) $series > 0) {
                 $ids[] = (int) $series;
             }
         }

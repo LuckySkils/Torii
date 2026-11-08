@@ -307,7 +307,7 @@ final class DeliveryReconciler
 
         $this->giveUp($delivery, $lookupFailed
             ? "Failure A: Torii couldn't confirm within {$minutes} minutes that Shoko linked file {$delivery->shoko_file_id} to its series ({$delivery->last_error}), so the Anime library refresh was not sent."
-            : "Failure A: Shoko didn't link file {$delivery->shoko_file_id} to series {$delivery->shoko_series_id} within {$minutes} minutes, so the Anime library refresh was not sent.");
+            : "Failure A: Shoko didn't link file {$delivery->shoko_file_id} to {$this->seriesLabel($delivery)} within {$minutes} minutes, so the Anime library refresh was not sent.");
     }
 
     /**
@@ -327,12 +327,18 @@ final class DeliveryReconciler
         $linked = $delivery->shoko_series_id === null ? $series !== [] : in_array($delivery->shoko_series_id, $series, true);
 
         if (! $linked) {
-            $delivery->update(['last_error' => "Shoko hasn't linked file {$delivery->shoko_file_id} to series {$delivery->shoko_series_id} yet."]);
+            $delivery->update(['last_error' => "Shoko hasn't linked file {$delivery->shoko_file_id} to {$this->seriesLabel($delivery)} yet."]);
         } elseif (str_starts_with((string) $delivery->last_error, 'Shoko ')) {
             $delivery->update(['last_error' => null]);
         }
 
         return $linked;
+    }
+
+    /** "series 230", or "its series" while the delivery's Shoko series isn't known. */
+    private function seriesLabel(Delivery $delivery): string
+    {
+        return $delivery->shoko_series_id === null ? 'its series' : "series {$delivery->shoko_series_id}";
     }
 
     /**
