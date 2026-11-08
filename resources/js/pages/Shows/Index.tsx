@@ -276,6 +276,8 @@ export default function ShowsIndex({ shows, filters, filterOptions }: ShowsIndex
                                                     showId={show.id}
                                                     showName={show.name}
                                                     tracked={show.isTracked}
+                                                    trackable={show.trackable}
+                                                    blockedReason={show.trackBlockedReason}
                                                     downloadableCount={show.downloadableCount}
                                                     hasBatch={show.hasBatch}
                                                 />

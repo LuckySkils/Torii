@@ -117,6 +117,8 @@ export interface ReleaseShowRef {
 export interface ReleaseSummary {
     id: number;
     title: string;
+    /** The release group: "SubsPlease" for the feed, the parsed [Group] for a Nyaa import. */
+    group: string | null;
     show: ReleaseShowRef | null;
     episode: string | null;
     version: number | null;
@@ -141,6 +143,8 @@ export interface DashboardRelease extends Omit<ReleaseSummary, 'show'> {
               imageUrl: string | null;
               imageStatus: ImageStatus;
               isTracked: boolean;
+              trackable: boolean;
+              trackBlockedReason: string | null;
               anime: AnimeLinkSummary | null;
               hasSuggestions: boolean;
           })
@@ -169,6 +173,10 @@ export interface ShowSummary {
     firstSeenAt: string;
     lastSeenAt: string;
     isTracked: boolean;
+    /** False when the show has no SubsPlease release: tracking it is refused (§16). Tracked shows are always trackable. */
+    trackable: boolean;
+    /** Why it can't be tracked; null whenever `trackable` is true. */
+    trackBlockedReason: string | null;
     trackingMode: TrackingMode | null;
     ruleState: RuleState;
     ruleError: string | null;
@@ -425,6 +433,8 @@ export interface AnimeShowLinkedShow {
     name: string;
     imageUrl: string | null;
     isTracked: boolean;
+    trackable: boolean;
+    trackBlockedReason: string | null;
     linkSource: LinkSource;
     confidence: number;
     linkedAt: string;
@@ -474,16 +484,25 @@ export interface AnimeShowProps {
  * ------------------------------------------------------------------------- */
 
 /**
- * `new` items can still be unselected by default (a remake, or an episode covered
- * by a batch in the list); `reason` then says why.
+ * Precedence order (§16). `new` items can still be unselected by default (a remake,
+ * or an episode covered by a batch of the same series); `reason` then says why.
  */
-export type NyaaItemState = 'new' | 'in_qbit' | 'known_release' | 'superseded' | 'unparsed';
+export type NyaaItemState = 'unparsed' | 'in_qbit' | 'known_release' | 'have_episode' | 'superseded' | 'duplicate_episode' | 'new';
 
 export interface NyaaPreviewItem {
     /** Stable within the preview (Nyaa's id); what confirm takes. */
     key: string;
     title: string;
+    /** The parsed release group ("SubsPlease", "Erai-raws", …). */
+    group: string | null;
+    /** The parsed suggested show name ("Black Clover S2"); null when unparsed. */
     showName: string | null;
+    /** The parsed name without the season suffix ("Black Clover"). */
+    parsedName: string | null;
+    /** From an explicit SxxEyy/Sxx marker only; SubsPlease titles keep the season in the name (null here). */
+    season: number | null;
+    /** Null when unparsed. */
+    seriesKey: string | null;
     episode: string | null;
     version: number | null;
     isBatch: boolean;
@@ -507,19 +526,54 @@ export interface NyaaPreviewItem {
     reason: string | null;
 }
 
-/** POST /import/nyaa/preview — a server-side snapshot, confirmed by `previewId`. */
+/** Where a series' items go: an existing show, or a show created on confirm. */
+export type NyaaTarget =
+    | { kind: 'existing'; showId: number; showName: string; trackable: boolean; trackBlockedReason: string | null }
+    | { kind: 'new'; name: string; trackable: boolean; trackBlockedReason: string | null };
+
+/** A show the backend thinks the series may belong to; best first, at most 5. */
+export interface NyaaCandidate {
+    showId: number;
+    showName: string;
+    /** e.g. "same name", "AniList title 'Sensha Isu' of the linked anime." */
+    why: string;
+    score: number;
+    trackable: boolean;
+}
+
+/** Items the backend groups as one show (e.g. Black Clover S2 from Judas and Erai-raws together). */
+export interface NyaaSeries {
+    /** e.g. "blackclover|s2". */
+    key: string;
+    parsedName: string;
+    season: number | null;
+    suggestedName: string;
+    altTitles: string[];
+    /** SubsPlease first, then alphabetical. */
+    groups: string[];
+    itemKeys: string[];
+    target: NyaaTarget;
+    candidates: NyaaCandidate[];
+}
+
+/** POST /import/nyaa/preview and POST /import/nyaa/preview/{previewId}/target — a server-side snapshot, confirmed by `previewId`. */
 export interface NyaaPreview {
     previewId: string;
     expiresAt: string;
     feedTitle: string;
     /** The feed came back full (one Nyaa page); there may be more results. */
     truncated: boolean;
-    /** Sorted by show (unparsed last), batches first, then episode and version. */
+    /** Series order, batches first, episode order, SubsPlease first, unparsed last. */
     items: NyaaPreviewItem[];
-    /** The one show every parsed item names; null when the feed spans several shows (or none). */
-    show: { existingShowId: number | null; name: string; willCreate: boolean } | null;
-    /** e.g. qBittorrent unreachable, or several shows in one feed. */
+    /** By suggested name. */
+    series: NyaaSeries[];
+    /** e.g. qBittorrent unreachable. */
     warnings: string[];
+}
+
+/** GET /import/nyaa/shows?q= — the target picker's search, at most 20. */
+export interface NyaaShowSearch {
+    shows: { id: number; name: string; isTracked: boolean; trackable: boolean; latestEpisode: string | null }[];
 }
 
 /** POST /import/nyaa/confirm */
@@ -550,7 +604,7 @@ export interface AnimeCardData {
     genres: string[];
     isAdult: boolean;
     siteUrl: string | null;
-    linkedShow: { id: number; name: string; isTracked: boolean } | null;
+    linkedShow: { id: number; name: string; isTracked: boolean; trackable: boolean; trackBlockedReason: string | null } | null;
 }
 
 /* ---------------------------------------------------------------------------
@@ -580,7 +634,7 @@ export interface ScheduleAiring {
         isAdult: boolean;
     };
     /** The linked show (a tracked one first when several), via the anime link. */
-    show: { id: number; name: string; isTracked: boolean } | null;
+    show: { id: number; name: string; isTracked: boolean; trackable: boolean; trackBlockedReason: string | null } | null;
     releaseState: ScheduleReleaseState | null;
     /** Episode 1, or the anime started within the last 14 days. */
     isNewSeries: boolean;

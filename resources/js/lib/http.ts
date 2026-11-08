@@ -43,19 +43,37 @@ function messageFor(status: number, body: unknown): string {
 
 export async function postJson<T>(url: string, body: unknown, signal?: AbortSignal): Promise<T> {
     const token = xsrfToken();
+
+    return send<T>(
+        url,
+        {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { 'X-XSRF-TOKEN': token } : {}),
+            },
+            body: JSON.stringify(body),
+        },
+        signal,
+    );
+}
+
+export async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
+    return send<T>(url, { method: 'GET' }, signal);
+}
+
+async function send<T>(url: string, init: RequestInit, signal?: AbortSignal): Promise<T> {
     let response: Response;
 
     try {
         response = await fetch(url, {
-            method: 'POST',
+            ...init,
             credentials: 'same-origin',
             headers: {
-                'Content-Type': 'application/json',
                 Accept: 'application/json',
                 'X-Requested-With': 'XMLHttpRequest',
-                ...(token ? { 'X-XSRF-TOKEN': token } : {}),
+                ...init.headers,
             },
-            body: JSON.stringify(body),
             signal,
         });
     } catch (error) {

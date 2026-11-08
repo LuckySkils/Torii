@@ -173,6 +173,8 @@ export default function ShowShow({ show, releases }: ShowShowProps) {
                                 showId={show.id}
                                 showName={show.name}
                                 tracked={show.isTracked}
+                                trackable={show.trackable}
+                                blockedReason={show.trackBlockedReason}
                                 downloadableCount={show.downloadableCount}
                                 hasBatch={show.hasBatch}
                                 withHint

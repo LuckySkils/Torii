@@ -234,6 +234,8 @@ function LinkedShowLine({ animeId, show }: { animeId: number; show: NonNullable<
                     showId={show.id}
                     showName={show.name}
                     tracked={show.isTracked}
+                    trackable={show.trackable ?? true}
+                    blockedReason={show.trackBlockedReason}
                     onTracked={(isTracked) =>
                         patchCachedCard(animeId, (card) => ({ ...card, linkedShow: card.linkedShow && { ...card.linkedShow, isTracked } }))
                     }

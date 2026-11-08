@@ -154,6 +154,8 @@ export function ShowCard({ show, selected, onToggleSelect, selectionMode = false
                     showId={show.id}
                     showName={show.name}
                     tracked={show.isTracked}
+                    trackable={show.trackable}
+                    blockedReason={show.trackBlockedReason}
                     downloadableCount={show.downloadableCount}
                     hasBatch={show.hasBatch}
                 />

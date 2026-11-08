@@ -1,6 +1,7 @@
 import { Switch } from '@/components/ui/switch';
 import { ACTION_HINTS } from '@/lib/hints';
 import { fetchShowQueueInfo, QueueInfoError, type ShowQueueInfo } from '@/lib/show-queue-info';
+import { type SharedData } from '@/types';
 import { router, usePage } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -21,11 +22,30 @@ interface TrackSwitchProps {
     hasBatch?: boolean;
     /** Explain what tracking does (show page). Off on cards and rows, where the column header explains it once. */
     withHint?: boolean;
+    /**
+     * False when tracking would be refused (§16: the show has no SubsPlease
+     * release). The switch is then greyed out with `blockedReason` on hover and
+     * behind the ⓘ on touch. Untracking always stays possible. Defaults to true.
+     */
+    trackable?: boolean;
+    blockedReason?: string | null;
     /** Called once the server has accepted the change. */
     onTracked?: (tracked: boolean) => void;
 }
 
-export function TrackSwitch({ showId, showName, tracked, downloadableCount, hasBatch, withHint = false, onTracked }: TrackSwitchProps) {
+const BLOCKED_FALLBACK = "This show can't be tracked.";
+
+export function TrackSwitch({
+    showId,
+    showName,
+    tracked,
+    downloadableCount,
+    hasBatch,
+    withHint = false,
+    trackable = true,
+    blockedReason = null,
+    onTracked,
+}: TrackSwitchProps) {
     const { version } = usePage();
     const [checked, setChecked] = useState(tracked);
     const [pending, setPending] = useState(false);
@@ -51,7 +71,17 @@ export function TrackSwitch({ showId, showName, tracked, downloadableCount, hasB
             {
                 preserveScroll: true,
                 preserveState: true,
-                onSuccess: () => onTracked?.(next),
+                onSuccess: (page) => {
+                    // A refusal (an untrackable show) comes back as a normal visit with an
+                    // error flash, which the layout toasts. The prop didn't change, so the
+                    // effect above won't reset the switch: put it back here.
+                    if ((page.props as Partial<SharedData>).flash?.error) {
+                        setChecked(!next);
+                        return;
+                    }
+
+                    onTracked?.(next);
+                },
                 onError: () => {
                     setChecked(!next);
                     toast.error(`Couldn't update tracking for "${showName}".`);
@@ -95,11 +125,30 @@ export function TrackSwitch({ showId, showName, tracked, downloadableCount, hasB
         }
     }
 
-    const control = <Switch checked={checked} disabled={pending} onCheckedChange={handleChange} aria-label={`Track ${showName}`} />;
+    // The backend reports tracked shows as trackable; checking `checked` too keeps
+    // untracking possible whatever the props say.
+    const blocked = !trackable && !checked;
+
+    const control = (
+        <Switch
+            checked={checked}
+            disabled={pending || blocked}
+            onCheckedChange={handleChange}
+            aria-label={blocked ? `Track ${showName} (unavailable)` : `Track ${showName}`}
+        />
+    );
 
     return (
         <>
-            {withHint ? <ActionHint hint={ACTION_HINTS.track}>{control}</ActionHint> : control}
+            {blocked ? (
+                <ActionHint hint={blockedReason ?? BLOCKED_FALLBACK} wrapDisabled>
+                    {control}
+                </ActionHint>
+            ) : withHint ? (
+                <ActionHint hint={ACTION_HINTS.track}>{control}</ActionHint>
+            ) : (
+                control
+            )}
             <TrackConfirmDialog
                 open={confirm !== null}
                 onOpenChange={(open) => !open && setConfirm(null)}

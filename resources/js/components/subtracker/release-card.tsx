@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { DispatchBadge } from './dispatch-badge';
 import { DownloadButton } from './download-button';
 import { RelativeTime } from './relative-time';
+import { ReleaseGroupBadge } from './release-group-badge';
 
 interface ReleaseCardProps {
     release: ReleaseSummary | DashboardRelease;
@@ -65,6 +66,7 @@ export function ReleaseCard({ release, showLink = false, poster, episode, badges
                                     batch
                                 </Badge>
                             )}
+                            <ReleaseGroupBadge group={release.group} />
                         </>
                     )}
                 </span>

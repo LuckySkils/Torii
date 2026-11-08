@@ -61,6 +61,8 @@ export default function Dashboard({ health, latestReleases }: DashboardProps) {
                                                         showId={release.show.id}
                                                         showName={release.show.name}
                                                         tracked={release.show.isTracked}
+                                                        trackable={release.show.trackable}
+                                                        blockedReason={release.show.trackBlockedReason}
                                                     />
                                                 </label>
                                             )

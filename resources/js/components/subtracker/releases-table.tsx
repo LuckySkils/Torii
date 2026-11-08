@@ -8,6 +8,7 @@ import { DispatchBadge } from './dispatch-badge';
 import { DownloadButton } from './download-button';
 import { ColumnHint } from './hint';
 import { RelativeTime } from './relative-time';
+import { ReleaseGroupBadge } from './release-group-badge';
 
 interface ReleasesTableProps {
     releases: ReleaseSummary[];
@@ -72,6 +73,7 @@ export function ReleasesTable({ releases, emptyMessage = 'No releases yet.' }: R
                                         batch
                                     </Badge>
                                 )}
+                                <ReleaseGroupBadge group={release.group} className="ml-1" />
                             </TableCell>
                             <TableCell className="max-w-sm truncate" title={release.title}>
                                 <a href={release.link} className="hover:underline">

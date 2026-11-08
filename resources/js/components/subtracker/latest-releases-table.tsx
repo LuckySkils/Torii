@@ -17,6 +17,7 @@ import { LatestEpisodeLabel } from './latest-episode-label';
 import { FirstEpisodeBadge, isPremiere, NewShowBadge } from './novelty-badges';
 import { PosterHoverPreview } from './poster-hover-preview';
 import { RelativeTime } from './relative-time';
+import { ReleaseGroupBadge } from './release-group-badge';
 import { ShowPoster } from './show-poster';
 import { TrackSwitch } from './track-switch';
 
@@ -86,6 +87,7 @@ export function ReleaseEpisode({ release }: { release: DashboardRelease }) {
                     v{release.version}
                 </Badge>
             )}
+            <ReleaseGroupBadge group={release.group} />
         </span>
     );
 }
@@ -165,7 +167,13 @@ export function LatestReleasesTable({ releases }: LatestReleasesTableProps) {
                             <TableCell className="whitespace-nowrap">{formatDelay(release.publishedAt, release.firstSeenAt)}</TableCell>
                             <TableCell>
                                 {release.show ? (
-                                    <TrackSwitch showId={release.show.id} showName={release.show.name} tracked={release.show.isTracked} />
+                                    <TrackSwitch
+                                        showId={release.show.id}
+                                        showName={release.show.name}
+                                        tracked={release.show.isTracked}
+                                        trackable={release.show.trackable}
+                                        blockedReason={release.show.trackBlockedReason}
+                                    />
                                 ) : (
                                     <span className="text-sm text-muted-foreground">—</span>
                                 )}

@@ -106,7 +106,14 @@ export default function AnimeShow({ anime, airings, linkedShows }: AnimeShowProp
                                     {/* Outside the link: toggling must not open the show. Same switch and confirm as everywhere else. */}
                                     <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
                                         <span className="hidden sm:inline">{show.isTracked ? 'Tracked' : 'Track'}</span>
-                                        <TrackSwitch showId={show.id} showName={show.name} tracked={show.isTracked} withHint />
+                                        <TrackSwitch
+                                            showId={show.id}
+                                            showName={show.name}
+                                            tracked={show.isTracked}
+                                            trackable={show.trackable}
+                                            blockedReason={show.trackBlockedReason}
+                                            withHint
+                                        />
                                     </label>
                                 </div>
                             ))}
