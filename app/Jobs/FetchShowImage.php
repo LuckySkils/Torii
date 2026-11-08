@@ -136,9 +136,15 @@ final class FetchShowImage implements ShouldBeUnique, ShouldQueue
     }
 
     /**
-     * Free drift check for FEED_PUBDATE_OFFSET_MINUTES: the search results already
-     * carry the API's (correct) release_date, so compare it with our stored
-     * published_at for any release we also have. Never makes a request of its own.
+     * Free cross-check of the pubDate correction: the search results already carry
+     * the API's release_date, so compare it with our stored published_at for any
+     * release we also have. Never makes a request of its own.
+     *
+     * The API is not an independent reference: its release_date is the feed's raw
+     * wall clock plus a fixed 7 h, all year (it logged 0 both before and after US
+     * daylight saving ended on 2026-11-01). With PubDateCorrector's DST-aware
+     * timezone mode, expect 0 for feed releases in summer and -60 in winter; any
+     * other value means something else has drifted.
      *
      * @param  array<int, SearchResultItem>  $candidates
      */

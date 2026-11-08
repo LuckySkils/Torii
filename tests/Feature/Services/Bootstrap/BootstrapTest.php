@@ -8,6 +8,8 @@ use App\Jobs\SyncAnimeAirings;
 use App\Jobs\SyncAnimeSeasons;
 use App\Jobs\SyncAnimeVocabulary;
 use App\Models\BootstrapTask;
+use App\Models\Release;
+use App\Models\Show;
 use App\Services\Bootstrap\BootstrapRunner;
 use App\Services\Bootstrap\BootstrapTaskDefinition;
 use App\Services\Bootstrap\BootstrapTasks;
@@ -194,7 +196,45 @@ test('the real tasks, in order, with their dependencies', function () {
         ['anime.initial-covers', ['anime.initial-sync']],
         ['anime.full-covers', ['anime.initial-covers']],
         ['anime.vocabulary', []],
+        ['releases.pubdate-timezone', []],
     ]);
+});
+
+test('the daylight-saving task recomputes release times with releases:fix-published', function () {
+    $task = collect(app(BootstrapTasks::class)->all())->firstWhere('key', 'releases.pubdate-timezone');
+    $jobs = ($task->jobs)();
+
+    expect($task->label)->toBe('Recompute release times (daylight saving)')
+        ->and($jobs)->toHaveCount(1)
+        ->and($jobs[0])->toBeInstanceOf(RunArtisanCommand::class)
+        ->and($jobs[0]->command)->toBe('releases:fix-published')
+        ->and($jobs[0]->parameters)->toBe([]);
+
+    Artisan::call('torii:bootstrap', ['--list' => true]);
+    expect(Artisan::output())->toMatch('/\| releases\.pubdate-timezone\s+\| Recompute release times \(daylight saving\)/');
+});
+
+test('an established install recomputes its release times on the next start', function () {
+    config(['subtracker.feed.pubdate_timezone' => 'America/Los_Angeles']);
+    foreach (app(BootstrapTasks::class)->all() as $task) {
+        if ($task->key !== 'releases.pubdate-timezone') {
+            BootstrapTask::create(['key' => $task->key, 'started_at' => now()->subMonth(), 'completed_at' => now()->subMonth()]);
+        }
+    }
+
+    $show = Show::create(['name' => 'Winter Show', 'slug' => 'winter-show', 'first_seen_at' => '2026-11-01 00:00:00', 'last_seen_at' => '2026-11-08 00:00:00']);
+    // Stored by the fixed -7 h offset: an hour early in winter.
+    $release = Release::create([
+        'show_id' => $show->id, 'guid' => 'W', 'title' => '[SubsPlease] Winter Show - 02 (1080p) [ABCD1234].mkv', 'episode' => '02',
+        'is_batch' => false, 'resolution' => '1080p', 'link' => 'magnet:?xt=urn:btih:W',
+        'published_at' => '2026-11-08 13:36:57', 'published_at_raw' => 'Sun, 08 Nov 2026 06:36:57 +0000', 'first_seen_at' => '2026-11-08 14:39:01',
+    ]);
+
+    // The phpunit queue is sync, so the chain runs inline.
+    $this->artisan('torii:bootstrap')->assertSuccessful();
+
+    expect(taskState('releases.pubdate-timezone'))->toBe('done')
+        ->and($release->refresh()->published_at->toIso8601String())->toBe('2026-11-08T14:36:57+00:00');
 });
 
 test('on a fresh database the real bootstrap only queues jobs: the roots now, dependents later', function () {
@@ -207,10 +247,12 @@ test('on a fresh database the real bootstrap only queues jobs: the roots now, de
         ['season' => 'SPRING', 'year' => 2026], ['season' => 'SUMMER', 'year' => 2026], ['season' => 'FALL', 'year' => 2026],
     ] && $job->allLinked);
     Queue::assertPushedWithChain(SyncAnimeVocabulary::class, [CompleteBootstrapTask::class]);
+    Queue::assertPushedWithChain(RunArtisanCommand::class, [CompleteBootstrapTask::class], fn (RunArtisanCommand $job) => $job->command === 'releases:fix-published' && $job->parameters === []);
     Queue::assertNotPushed(SyncAnimeAirings::class);
-    Queue::assertNotPushed(RunArtisanCommand::class, fn (RunArtisanCommand $job) => $job->command !== 'feed:poll');
+    Queue::assertNotPushed(RunArtisanCommand::class, fn (RunArtisanCommand $job) => ! in_array($job->command, ['feed:poll', 'releases:fix-published'], true));
 
     expect(taskState('feed.initial-poll'))->toBe('running')
+        ->and(taskState('releases.pubdate-timezone'))->toBe('running')
         ->and(taskState('anime.vocabulary'))->toBe('running')
         ->and(taskState('anime.initial-sync'))->toBe('running')
         ->and(taskState('anime.initial-airings'))->toBe('pending');

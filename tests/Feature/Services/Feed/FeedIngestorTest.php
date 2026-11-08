@@ -69,8 +69,8 @@ test('keeps the literal pubDate, with a warning, when the correction would be la
         && $context['release'] === '[SubsPlease] Test Show - 01 (1080p) [ABCD1234].mkv');
 });
 
-test('an offset of 0 stores the pubDate unchanged', function () {
-    config(['subtracker.feed.pubdate_offset_minutes' => 0]);
+test('no timezone and an offset of 0 store the pubDate unchanged', function () {
+    config(['subtracker.feed.pubdate_timezone' => 'none', 'subtracker.feed.pubdate_offset_minutes' => 0]);
     $this->travelTo('2026-09-22 00:00:00');
 
     (new FeedIngestor)->ingest(sampleFeedXml([
@@ -78,6 +78,19 @@ test('an offset of 0 stores the pubDate unchanged', function () {
     ]));
 
     expect(Release::where('guid', 'GUID-ZERO')->sole()->published_at->toIso8601String())->toBe('2026-09-21T08:32:00+00:00');
+});
+
+test('a winter pubDate is corrected by 8 hours, daylight saving having ended', function () {
+    $this->travelTo('2026-11-08 14:39:01');
+
+    (new FeedIngestor)->ingest(sampleFeedXml([
+        sampleItem('[SubsPlease] Test Show - 06 (1080p) [ABCD1234].mkv', 'GUID-WINTER', 'Test Show - 1080', pubDate: 'Sun, 08 Nov 2026 06:36:57 +0000'),
+    ]));
+
+    $release = Release::where('guid', 'GUID-WINTER')->sole();
+
+    expect($release->published_at->toIso8601String())->toBe('2026-11-08T14:36:57+00:00')
+        ->and($release->published_at_raw)->toBe('Sun, 08 Nov 2026 06:36:57 +0000');
 });
 
 test('ingests items from the real feed fixture and creates shows and releases', function () {

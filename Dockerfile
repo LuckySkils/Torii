@@ -62,6 +62,7 @@ ENV APP_NAME=Torii \
     SESSION_DRIVER=database \
     FEED_URL=https://subsplease.org/rss/?r=1080 \
     FEED_POLL_BASE_MINUTES=15 \
+    FEED_PUBDATE_TIMEZONE=America/Los_Angeles \
     FEED_PUBDATE_OFFSET_MINUTES=-420 \
     QBIT_FEED_PATH="SubsPlease 1080p" \
     QBIT_CATEGORY=anime \
@@ -72,7 +73,13 @@ ENV APP_NAME=Torii \
     NTFY_TOKEN="" \
     NOTIFY_NEW_EPISODE=true \
     NOTIFY_DOWNLOADED=true \
-    NOTIFY_REPACKS=false     TORII_PORT=8080     MCP_ENABLED=false     MCP_PORT=""     MCP_ALLOW_WRITES=false     MCP_TOKEN=""     MCP_MAX_RESULTS=50 \
+    NOTIFY_REPACKS=false \
+    TORII_PORT=8080 \
+    MCP_ENABLED=false \
+    MCP_PORT="" \
+    MCP_ALLOW_WRITES=false \
+    MCP_TOKEN="" \
+    MCP_MAX_RESULTS=50 \
     NYAA_TRACKERS="" \
     RECONCILER_ENABLED=false \
     RECONCILER_DRY_RUN=true \

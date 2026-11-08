@@ -75,6 +75,16 @@ class BootstrapTasks
                 [],
                 fn () => [new SyncAnimeVocabulary],
             ),
+            new BootstrapTaskDefinition(
+                'releases.pubdate-timezone',
+                'Recompute release times (daylight saving)',
+                // For installs whose releases were corrected with the fixed -7 h offset:
+                // the feed's clock follows US daylight saving, so winter rows were an
+                // hour early. Recomputes every feed release (and episode-1 premiere
+                // dates) from its raw pubDate; on a fresh install there's nothing to do.
+                [],
+                fn () => [new RunArtisanCommand('releases:fix-published')],
+            ),
         ];
     }
 }

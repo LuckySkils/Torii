@@ -154,7 +154,7 @@ test('bootstrap: a failed task is a problem with its error; pending tasks are on
 
     BootstrapTask::where('key', 'anime.initial-sync')->update(['completed_at' => now(), 'error' => null]);
 
-    expect(healthChecks()['bootstrap'])->toMatchArray(['ok' => true, 'detail' => 'In progress: 6 of 7 tasks done.']);
+    expect(healthChecks()['bootstrap'])->toMatchArray(['ok' => true, 'detail' => 'In progress: 7 of 8 tasks done.']);
 });
 
 test('the reconciler listener check appears only with the reconciler on: connected, disconnected, or gone', function () {

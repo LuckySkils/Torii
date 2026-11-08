@@ -14,7 +14,10 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Recomputes published_at for every release from its raw feed string, so the
- * result depends only on (raw, first_seen_at, offset) and re-running is a no-op.
+ * result depends only on (raw, first_seen_at, the corrector's settings) and
+ * re-running is a no-op. Each row is corrected with the offset in effect at its
+ * own date (PubDateCorrector's timezone mode), so one pass fixes summer and
+ * winter rows alike.
  */
 final class PublishedAtFixer
 {
@@ -53,7 +56,7 @@ final class PublishedAtFixer
 
                     $publishedAt = $this->corrector->correct($raw, $release->first_seen_at, $release->title);
 
-                    if ($this->corrector->offsetMinutes() !== 0 && $publishedAt->equalTo($this->corrector->literal($raw))) {
+                    if ($this->corrector->appliesTo($raw) && $publishedAt->equalTo($this->corrector->literal($raw))) {
                         $stats['keptLiteral']++;
                     }
 

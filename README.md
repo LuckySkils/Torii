@@ -238,7 +238,8 @@ For a permanent setup, run these under systemd or Supervisor. Restart `queue:wor
 | `QBIT_TAG` | `subtracker` | Tag added to torrents Torii queues directly |
 | `FEED_URL` | `https://subsplease.org/rss/?r=1080` | SubsPlease feed to track |
 | `FEED_POLL_BASE_MINUTES` | `15` | Normal poll interval |
-| `FEED_PUBDATE_OFFSET_MINUTES` | `-420` | Correction for the feed's timestamps. SubsPlease labels them `+0000`, but their clock runs 7 hours behind UTC, so Torii shifts every release time 7 hours later to get true UTC. If their offset follows US daylight saving, this will need to be `-480` from November; the dashboard's median polling delay drifting by about an hour is the sign. After changing it, run `releases:fix-published`. |
+| `FEED_PUBDATE_TIMEZONE` | `America/Los_Angeles` | Correction for the feed's timestamps. SubsPlease labels them `+0000`, but they are really US Pacific wall-clock times, daylight saving included (7 hours behind UTC in summer, 8 in winter), so Torii reads them in this zone to get true UTC. Set `none` to use `FEED_PUBDATE_OFFSET_MINUTES` instead; an unknown zone name does the same and logs a warning. A timestamp with any offset other than `+0000` is trusted as written. After changing it, run `releases:fix-published`. |
+| `FEED_PUBDATE_OFFSET_MINUTES` | `-420` | Fallback, used only when `FEED_PUBDATE_TIMEZONE` is `none`: a fixed number of minutes the feed's clock runs off UTC (`-420` shifts every release time 7 hours later, all year). The dashboard's median polling delay drifting by about an hour is the sign it no longer matches. After changing it, run `releases:fix-published`. |
 | `METADATA_PROVIDER` | `anilist` | Metadata source. Providers sit behind an interface, so others can be added. |
 | `ANILIST_REQUESTS_PER_MINUTE` | `25` | Self-imposed throttle. AniList documents 90/min but has long run degraded at 30/min, so Torii stays below that. |
 | `APP_URL` | `http://localhost:8080` | Address you open Torii at |
@@ -292,7 +293,7 @@ With Docker, prefix these with `docker compose exec torii php artisan`. Most of 
 | `shows:recompute-premiere` | Recalculate premiere dates and seasons |
 | `releases:recheck-errors` | Re-check failed queue attempts against qBittorrent |
 | `reconciler:replay {delivery*} {--downloaded}` | Delivery reconciler: re-run deliveries against the Shoko events stored in the last 14 days (safe to re-run) |
-| `releases:fix-published` | Recompute every release time from the raw feed value and `FEED_PUBDATE_OFFSET_MINUTES` (safe to re-run) |
+| `releases:fix-published` | Recompute every release time from the raw feed value and `FEED_PUBDATE_TIMEZONE` (or `FEED_PUBDATE_OFFSET_MINUTES`) (safe to re-run) |
 
 ## Limitations
 

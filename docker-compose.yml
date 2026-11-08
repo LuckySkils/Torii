@@ -10,7 +10,10 @@ x-torii-environment: &torii-environment
   QBIT_CATEGORY: ${QBIT_CATEGORY:-anime}
   APP_URL: ${APP_URL:-http://localhost:8080}
   DB_PASSWORD: ${DB_PASSWORD:-torii}
-  # SubsPlease's pubDate runs this many minutes off UTC (may need -480 after US DST ends)
+  # SubsPlease's pubDate is this zone's wall clock (DST included) mislabelled as UTC.
+  # "none" switches to the fixed offset below (an empty value falls back to the default here)
+  FEED_PUBDATE_TIMEZONE: ${FEED_PUBDATE_TIMEZONE:-America/Los_Angeles}
+  # Fallback only, used when FEED_PUBDATE_TIMEZONE is "none": minutes the pubDate runs off UTC
   FEED_PUBDATE_OFFSET_MINUTES: ${FEED_PUBDATE_OFFSET_MINUTES:--420}
   # Notifications: empty NTFY_URL = off
   NTFY_URL: ${NTFY_URL:-}

@@ -11,7 +11,7 @@ class ReleasesFixPublished extends Command
 {
     protected $signature = 'releases:fix-published';
 
-    protected $description = 'Recompute published_at for every release from its raw feed pubDate and FEED_PUBDATE_OFFSET_MINUTES (safe to re-run)';
+    protected $description = 'Recompute published_at for every release from its raw feed pubDate and FEED_PUBDATE_TIMEZONE (or FEED_PUBDATE_OFFSET_MINUTES when that is "none") (safe to re-run)';
 
     public function handle(PublishedAtFixer $fixer): int
     {

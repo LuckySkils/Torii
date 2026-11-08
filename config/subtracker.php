@@ -9,8 +9,14 @@ return [
         'poll_base_minutes' => (int) env('FEED_POLL_BASE_MINUTES', 15),
         'poll_hot_minutes' => (int) env('FEED_POLL_HOT_MINUTES', 2),
         'hot_window_minutes' => (int) env('FEED_HOT_WINDOW_MINUTES', 45),
-        // SubsPlease labels pubDate "+0000" while its clock actually runs this many
-        // minutes off UTC; published_at = parsed pubDate minus this offset.
+        // SubsPlease labels pubDate "+0000" while its clock is really US Pacific time,
+        // daylight saving included. The raw wall clock is read in this zone and
+        // converted to UTC (see PubDateCorrector). Empty or "none" (any case) turns
+        // that off in favour of the fixed offset below; so does an unknown zone,
+        // with a warning.
+        'pubdate_timezone' => env('FEED_PUBDATE_TIMEZONE', 'America/Los_Angeles'),
+        // Fallback only, when no timezone is in effect: published_at = parsed
+        // pubDate minus this many minutes.
         'pubdate_offset_minutes' => (int) env('FEED_PUBDATE_OFFSET_MINUTES', -420),
     ],
 
