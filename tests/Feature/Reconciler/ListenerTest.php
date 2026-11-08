@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\ReconcilerEventType;
 use App\Jobs\Reconciler\ProcessReconcilerEvent;
 use App\Models\ReconcilerEvent;
+use App\Services\Reconciler\JellyfinEvents;
 use App\Services\Reconciler\Listener\ConnectionSupervisor;
 use App\Services\Reconciler\Listener\JellyfinSession;
 use App\Services\Reconciler\Listener\ReconcilerSocket;
@@ -12,6 +13,8 @@ use App\Services\Reconciler\Listener\ShokoSession;
 use App\Services\Reconciler\Listener\SocketConnector;
 use App\Services\Reconciler\ListenerHeartbeat;
 use App\Services\Reconciler\SignalRReader;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 
 /** A socket that hands out scripted frames, then reports itself closed. */
@@ -184,4 +187,91 @@ test('torii:listen exits cleanly when the reconciler is off, and with an error w
 
     config(['subtracker.reconciler.enabled' => true, 'subtracker.reconciler.shoko_api_key' => '', 'subtracker.reconciler.jellyfin_anime_library_id' => '']);
     $this->artisan('torii:listen')->expectsOutputToContain('set SHOKO_API_KEY, JELLYFIN_ANIME_LIBRARY_ID')->assertExitCode(1);
+});
+
+// ── Diagnosing missing LibraryChanged (production, 2026-10-11) ───────────────
+
+test('the Anime library matches however either side writes the id: dashes, case', function (string $configured, string $sent) {
+    $message = jellyfinCapture()[2];
+    $message['Data']['CollectionFolders'] = ['abebc196cc1b8bbf6f8bb5ca7b5ad6f1', $sent];
+
+    expect(JellyfinEvents::normalize($message, $configured))->not->toBeNull();
+})->with([
+    'dashed config, dashless sent' => ['0c419071-40d8-02bb-5843-0fed7e2cd79e', '0c41907140d802bb58430fed7e2cd79e'],
+    'uppercase dashed config' => ['0C419071-40D8-02BB-5843-0FED7E2CD79E', '0c41907140d802bb58430fed7e2cd79e'],
+    'dashless config, dashed sent' => ['0c41907140d802bb58430fed7e2cd79e', '0c419071-40d8-02bb-5843-0fed7e2cd79e'],
+    'padded config' => [' 0c419071-40d8-02bb-5843-0fed7e2cd79e ', '0C41907140D802BB58430FED7E2CD79E'],
+]);
+
+test('with RECONCILER_DEBUG, every Jellyfin message type is logged before filtering', function () {
+    config(['subtracker.reconciler.debug' => true]);
+    Log::spy();
+    [$forceKeepAlive, $keepAlive, $libraryChanged] = jellyfinCapture();
+    $otherLibrary = $libraryChanged;
+    $otherLibrary['Data']['CollectionFolders'] = ['abebc196cc1b8bbf6f8bb5ca7b5ad6f1'];
+    $socket = new ScriptedSocket([
+        ...array_map(json_encode(...), [$forceKeepAlive, $keepAlive, $libraryChanged, $otherLibrary, ['MessageType' => 'RefreshProgress', 'Data' => ['ItemId' => '0c41907140d802bb58430fed7e2cd79e', 'Progress' => '100']]]),
+        'not json',
+    ]);
+
+    app(JellyfinSession::class)->run($socket);
+
+    $logged = fn (array $expected) => Log::shouldHaveReceived('info')
+        ->withArgs(fn (string $message, array $context = []) => $message === 'Reconciler debug: Jellyfin message' && array_intersect_assoc($expected, $context) === $expected)
+        ->once();
+    $logged(['type' => 'ForceKeepAlive', 'data' => '60']);
+    $logged(['type' => 'KeepAlive']);
+    $logged(['type' => 'LibraryChanged', 'matchesAnimeLibrary' => true, 'itemsAdded' => 6]);
+    $logged(['type' => 'LibraryChanged', 'matchesAnimeLibrary' => false]);
+    $logged(['type' => 'RefreshProgress', 'data' => '{"ItemId":"0c41907140d802bb58430fed7e2cd79e","Progress":"100"}']);
+    Log::shouldHaveReceived('info')->with('Reconciler debug: Jellyfin sent a non-JSON message', ['excerpt' => 'not json'])->once();
+
+    // Filtering is unchanged: one LibraryChanged recorded.
+    expect(ReconcilerEvent::count())->toBe(1);
+});
+
+test('without RECONCILER_DEBUG nothing per message is logged', function () {
+    Log::spy();
+
+    app(JellyfinSession::class)->run(new ScriptedSocket(array_map(json_encode(...), jellyfinCapture())));
+
+    Log::shouldNotHaveReceived('info', fn (string $message) => str_starts_with($message, 'Reconciler debug'));
+});
+
+test('the debug session check logs whether Jellyfin attached a user to the listener', function () {
+    Log::spy();
+    Http::fake(['https://jellyfin.example/Sessions*' => Http::sequence()
+        ->push([['Id' => 's1', 'UserId' => '00000000000000000000000000000000', 'Client' => 'torii', 'DeviceId' => 'torii-reconciler']])
+        ->push([['Id' => 's2', 'UserId' => '5f2c0e8a9b3d4e1f8a7b6c5d4e3f2a1b', 'UserName' => 'torii', 'Client' => 'torii']])]);
+    $session = app(JellyfinSession::class);
+
+    $session->logSessionUser();
+    $session->logSessionUser();
+
+    Http::assertSent(fn ($request) => str_contains($request->url(), '/Sessions?deviceId=torii-reconciler'));
+    Log::shouldHaveReceived('info')
+        ->withArgs(fn (string $message, array $context = []) => $message === 'Reconciler debug: Jellyfin sessions for the listener device' && $context['hasUser'] === false && $context['sessions'][0]['id'] === 's1')
+        ->once();
+    Log::shouldHaveReceived('info')
+        ->withArgs(fn (string $message, array $context = []) => $message === 'Reconciler debug: Jellyfin sessions for the listener device' && $context['hasUser'] === true && $context['sessions'][0]['userName'] === 'torii')
+        ->once();
+});
+
+test('with RECONCILER_DEBUG, every Shoko event target is logged before filtering', function () {
+    config(['subtracker.reconciler.debug' => true]);
+    Log::spy();
+    $capture = shokoCapture();
+    $socket = new ScriptedSocket(['{}'.SignalRReader::SEPARATOR, implode('', array_map(shokoFrame(...), $capture))]);
+
+    app(ShokoSession::class)->run($socket);
+
+    foreach (['ShokoEvent:FileDetected' => false, 'ShokoEvent:FileHashed' => false, 'ShokoEvent:FileMatched' => true, 'ShokoEvent:EpisodeUpdated' => false] as $target => $kept) {
+        Log::shouldHaveReceived('info')
+            ->withArgs(fn (string $message, array $context = []) => $message === 'Reconciler debug: Shoko event' && $context['target'] === $target && $context['kept'] === $kept)
+            ->atLeast()->once();
+    }
+    Log::shouldHaveReceived('info')
+        ->withArgs(fn (string $message, array $context = []) => $message === 'Reconciler debug: Shoko event')
+        ->times(count($capture));
+    expect(ReconcilerEvent::count())->toBe(3);
 });

@@ -56,8 +56,14 @@ return [
         // Seconds after the trigger at which each check attempt runs.
         'backoff' => array_values(array_map('intval', array_filter(array_map('trim', explode(',', (string) env('RECONCILER_BACKOFF', '3,7,15'))), 'is_numeric'))) ?: [3, 7, 15],
         'library_refresh_timeout' => (int) env('RECONCILER_LIBRARY_REFRESH_TIMEOUT', 300),
+        // Minutes after failure A is confirmed at which Shoko is asked again whether it
+        // has linked the file to its series; fix A waits for the link.
+        'link_backoff' => array_values(array_map('intval', array_filter(array_map('trim', explode(',', (string) env('RECONCILER_LINK_BACKOFF', '1,3,10,30'))), 'is_numeric'))) ?: [1, 3, 10, 30],
         'listener_lifetime' => (int) env('RECONCILER_LISTENER_LIFETIME', 86400),
         'notify_on_fix' => filter_var(env('RECONCILER_NOTIFY_ON_FIX', true), FILTER_VALIDATE_BOOL),
+        // Logs every Jellyfin socket message's type before filtering, and the user
+        // Jellyfin attaches to the listener's session (diagnosing missing events).
+        'debug' => filter_var(env('RECONCILER_DEBUG', false), FILTER_VALIDATE_BOOL),
         'event_retention_days' => 14,
         'shoko_ping_seconds' => 15,
         'jellyfin_keepalive_seconds' => 30,

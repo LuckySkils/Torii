@@ -19,6 +19,12 @@ enum DeliveryState: string
     /** Jellyfin has the episode. */
     case InJellyfin = 'in_jellyfin';
 
+    /**
+     * Failure A confirmed, but Shoko hasn't linked the file to its series yet, so
+     * fix A would find nothing to place: waiting for the link before sending it.
+     */
+    case AwaitingLink = 'awaiting_link';
+
     /** The Anime library refresh (fix A) is running for it. */
     case FixingA = 'fixing_a';
 

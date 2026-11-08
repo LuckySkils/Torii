@@ -14,7 +14,8 @@ use RuntimeException;
 /**
  * One Shoko SignalR connection (§17), negotiate skipped: handshake, then records
  * split on 0x1E. Server pings are answered, and a ping goes out every ~15 s.
- * Kept invocations are recorded; everything else is dropped here.
+ * Kept invocations are recorded; everything else is dropped here. With
+ * RECONCILER_DEBUG, every invocation's target is logged before filtering.
  */
 final class ShokoSession
 {
@@ -81,6 +82,16 @@ final class ShokoSession
     {
         $target = (string) ($record['target'] ?? '');
         $event = ShokoEvents::normalize($target, (array) ($record['arguments'] ?? []));
+
+        // Debug: every Shoko event, kept or not, to find which one marks a file
+        // being linked to its series (fix A waits for that link).
+        if (config('subtracker.reconciler.debug')) {
+            logger()->info('Reconciler debug: Shoko event', [
+                'target' => $target,
+                'kept' => $event !== null,
+                'data' => mb_substr((string) json_encode($record['arguments'] ?? []), 0, 500),
+            ]);
+        }
 
         if ($event !== null) {
             $this->recorder->record('shoko', $event['type'], $target, $event['payload']);

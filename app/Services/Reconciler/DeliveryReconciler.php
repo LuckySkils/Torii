@@ -10,6 +10,7 @@ use App\Enums\NotificationKind;
 use App\Enums\ReconcilerEventType;
 use App\Jobs\Reconciler\CheckDeliveryInJellyfin;
 use App\Jobs\Reconciler\CheckSeriesEpisodes;
+use App\Jobs\Reconciler\CheckShokoLink;
 use App\Jobs\Reconciler\FinishLibraryRefresh;
 use App\Jobs\SendNotification;
 use App\Models\Delivery;
@@ -54,7 +55,10 @@ final class DeliveryReconciler
 
     private const SERIES_ADDED = 'reconciler:shoko-series-added:';
 
-    public function __construct(private readonly JellyfinClient $jellyfin) {}
+    public function __construct(
+        private readonly JellyfinClient $jellyfin,
+        private readonly ShokoClient $shoko,
+    ) {}
 
     // ── Correlation ──────────────────────────────────────────────────────────
 
@@ -252,9 +256,83 @@ final class DeliveryReconciler
 
         match (true) {
             $attempt < $this->attempts() => CheckDeliveryInJellyfin::dispatch($delivery->id, $run, $phase, $attempt + 1)->delay($this->delayBefore($attempt + 1)),
-            $phase === self::INITIAL => $this->fixA($delivery),
+            $phase === self::INITIAL => $this->fixAOnceLinked($delivery),
             default => $this->giveUp($delivery, 'Failure A: the episode never reached Jellyfin, even after the Anime library refresh.'),
         };
+    }
+
+    /**
+     * Fix A only helps once Shoko has linked the file to its series: Shokofin
+     * places nothing without that link (production, delivery #6: the refresh ran,
+     * Shokofin found no cross-references for the file). So ask Shoko first; if the
+     * link isn't there, wait for it on the link schedule (1, 3, 10, 30 min).
+     */
+    private function fixAOnceLinked(Delivery $delivery): void
+    {
+        if ($this->shokoLinked($delivery)) {
+            $this->fixA($delivery);
+
+            return;
+        }
+
+        $delivery->update(['state' => DeliveryState::AwaitingLink]);
+        logger()->info('Reconciler: failure A confirmed, waiting for Shoko to link the file to its series before fix A', ['delivery' => $delivery->id]);
+        CheckShokoLink::dispatch($delivery->id, $delivery->run, 1)->delay($this->linkDelayBefore(1));
+    }
+
+    public function checkShokoLink(int $deliveryId, int $run, int $attempt): void
+    {
+        $delivery = $this->current($deliveryId, $run, DeliveryState::AwaitingLink);
+
+        if ($delivery === null) {
+            return;
+        }
+
+        if ($this->shokoLinked($delivery)) {
+            $this->fixA($delivery);
+
+            return;
+        }
+
+        $schedule = (array) config('subtracker.reconciler.link_backoff');
+
+        if ($attempt < count($schedule)) {
+            CheckShokoLink::dispatch($delivery->id, $run, $attempt + 1)->delay($this->linkDelayBefore($attempt + 1));
+
+            return;
+        }
+
+        $minutes = (int) end($schedule);
+        $lookupFailed = str_starts_with((string) $delivery->last_error, 'Shoko file lookup failed');
+
+        $this->giveUp($delivery, $lookupFailed
+            ? "Failure A: Torii couldn't confirm within {$minutes} minutes that Shoko linked file {$delivery->shoko_file_id} to its series ({$delivery->last_error}), so the Anime library refresh was not sent."
+            : "Failure A: Shoko didn't link file {$delivery->shoko_file_id} to series {$delivery->shoko_series_id} within {$minutes} minutes, so the Anime library refresh was not sent.");
+    }
+
+    /**
+     * Whether Shoko cross-references the delivery's file to its Shoko series (to
+     * any series when that isn't known). A failed lookup counts as not yet.
+     */
+    private function shokoLinked(Delivery $delivery): bool
+    {
+        try {
+            $series = $this->shoko->fileSeriesIds((int) $delivery->shoko_file_id);
+        } catch (Throwable $e) {
+            $delivery->update(['last_error' => 'Shoko file lookup failed: '.$e->getMessage()]);
+
+            return false;
+        }
+
+        $linked = $delivery->shoko_series_id === null ? $series !== [] : in_array($delivery->shoko_series_id, $series, true);
+
+        if (! $linked) {
+            $delivery->update(['last_error' => "Shoko hasn't linked file {$delivery->shoko_file_id} to series {$delivery->shoko_series_id} yet."]);
+        } elseif (str_starts_with((string) $delivery->last_error, 'Shoko ')) {
+            $delivery->update(['last_error' => null]);
+        }
+
+        return $linked;
     }
 
     /**
@@ -327,8 +405,15 @@ final class DeliveryReconciler
             CheckDeliveryInJellyfin::dispatch($deliveryId, $run, self::AFTER_FIX_A, 1)->delay($this->delayBefore(1));
         }
 
-        if ($batch !== []) {
-            logger()->info('Reconciler: Anime library refresh finished', ['deliveries' => count($batch), 'by' => $token === null ? 'library.changed' : 'timeout']);
+        if ($batch !== [] && $token === null) {
+            logger()->info('Reconciler: Anime library refresh finished (library.changed)', ['deliveries' => count($batch)]);
+        } elseif ($batch !== []) {
+            // The re-check normally starts from the refresh's own completion event;
+            // this is only the safety net, and a sign the socket isn't getting events.
+            logger()->warning('Reconciler: no LibraryChanged arrived for the Anime library refresh; re-checking after the timeout instead', [
+                'deliveries' => count($batch),
+                'timeoutSeconds' => (int) config('subtracker.reconciler.library_refresh_timeout'),
+            ]);
         }
     }
 
@@ -543,6 +628,14 @@ final class DeliveryReconciler
     private function attempts(): int
     {
         return count((array) config('subtracker.reconciler.backoff'));
+    }
+
+    /** Seconds before link check n: the schedule is in minutes after failure A was confirmed (1, 3, 10, 30). */
+    private function linkDelayBefore(int $attempt): int
+    {
+        $schedule = array_values((array) config('subtracker.reconciler.link_backoff'));
+
+        return 60 * ((int) $schedule[$attempt - 1] - ($attempt > 1 ? (int) $schedule[$attempt - 2] : 0));
     }
 
     /** Seconds before attempt n: the backoff is in seconds after the trigger (3, 7, 15). */

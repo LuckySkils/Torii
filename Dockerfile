@@ -84,8 +84,10 @@ ENV APP_NAME=Torii \
     JELLYFIN_DEVICE_ID=torii-reconciler \
     RECONCILER_BACKOFF=3,7,15 \
     RECONCILER_LIBRARY_REFRESH_TIMEOUT=300 \
+    RECONCILER_LINK_BACKOFF=1,3,10,30 \
     RECONCILER_LISTENER_LIFETIME=86400 \
-    RECONCILER_NOTIFY_ON_FIX=true
+    RECONCILER_NOTIFY_ON_FIX=true \
+    RECONCILER_DEBUG=false
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 COPY composer.json composer.lock ./

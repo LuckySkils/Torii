@@ -39,8 +39,12 @@ x-torii-environment: &torii-environment
   JELLYFIN_DEVICE_ID: ${JELLYFIN_DEVICE_ID:-torii-reconciler}
   RECONCILER_BACKOFF: ${RECONCILER_BACKOFF:-3,7,15}
   RECONCILER_LIBRARY_REFRESH_TIMEOUT: ${RECONCILER_LIBRARY_REFRESH_TIMEOUT:-300}
+  # Minutes after failure A at which Shoko is asked again whether the file is linked to its series
+  RECONCILER_LINK_BACKOFF: ${RECONCILER_LINK_BACKOFF:-1,3,10,30}
   RECONCILER_LISTENER_LIFETIME: ${RECONCILER_LISTENER_LIFETIME:-86400}
   RECONCILER_NOTIFY_ON_FIX: ${RECONCILER_NOTIFY_ON_FIX:-true}
+  # Logs every Jellyfin and Shoko event type, Shoko file lookups, and the listener session's Jellyfin user
+  RECONCILER_DEBUG: ${RECONCILER_DEBUG:-false}
 
 services:
   torii:

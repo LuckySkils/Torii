@@ -9,6 +9,7 @@ use App\Events\ReleaseDownloaded;
 use App\Http\Resources\ReleaseResource;
 use App\Jobs\Reconciler\CheckDeliveryInJellyfin;
 use App\Jobs\Reconciler\CheckSeriesEpisodes;
+use App\Jobs\Reconciler\CheckShokoLink;
 use App\Jobs\Reconciler\FinishLibraryRefresh;
 use App\Jobs\Reconciler\ProcessReconcilerEvent;
 use App\Jobs\SendNotification;
@@ -20,10 +21,12 @@ use App\Services\Reconciler\DeliveryReconciler;
 use App\Services\Reconciler\EventRecorder;
 use App\Services\Reconciler\JellyfinClient;
 use App\Services\Reconciler\JellyfinEvents;
+use App\Services\Reconciler\ShokoClient;
 use App\Services\Reconciler\ShokoEvents;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 
 const PSYREN = '[SubsPlease] PSYREN - 01 (1080p) [EB85F891].mkv';
@@ -38,6 +41,9 @@ beforeEach(function () {
         'subtracker.reconciler.jellyfin_url' => 'http://jellyfin.test',
         'subtracker.reconciler.jellyfin_api_key' => 'jf-key',
         'subtracker.reconciler.jellyfin_anime_library_id' => ANIME_LIBRARY,
+        'subtracker.reconciler.shoko_url' => 'http://shoko.test',
+        'subtracker.reconciler.shoko_api_key' => 'shoko-key',
+        'subtracker.reconciler.link_backoff' => [1, 3, 10, 30],
         'subtracker.reconciler.backoff' => [3, 7, 15],
         'subtracker.reconciler.library_refresh_timeout' => 300,
         'subtracker.reconciler.notify_on_fix' => true,
@@ -72,17 +78,19 @@ function listen(string $source, array $message): void
 
 /**
  * Runs the queued jobs, and the jobs they queue, until none are left. Delays are
- * skipped; fix A's timeout safety net and notifications are left queued unless named.
+ * skipped; fix A's timeout safety net and notifications are left queued unless
+ * named, and `$hold` keeps those classes queued too (to look at a waiting step).
  *
  * @param  array<int, class-string>  $alsoRun
+ * @param  array<int, class-string>  $hold
  */
-function drain(array $alsoRun = []): void
+function drain(array $alsoRun = [], array $hold = []): void
 {
     do {
         $ran = false;
 
         foreach (Queue::pushedJobs() as $class => $entries) {
-            if (in_array($class, [FinishLibraryRefresh::class, SendNotification::class], true) && ! in_array($class, $alsoRun, true)) {
+            if ((in_array($class, [FinishLibraryRefresh::class, SendNotification::class], true) && ! in_array($class, $alsoRun, true)) || in_array($class, $hold, true)) {
                 continue;
             }
 
@@ -156,12 +164,32 @@ function fakeJellyfin(array $recent, array $episodes = [4]): void
         'http://jellyfin.test/Shows/*' => $lists,
         'http://jellyfin.test/Items/*' => Http::response('', 204),
     ]);
+    fakeShoko([230, 232]);
 }
 
 /** The reconciler's own notifications (the ordinary "downloaded" one is the release's). */
 function assertNoDeliveryNotification(): void
 {
     Queue::assertNotPushed(SendNotification::class, fn ($job) => in_array($job->kind, [NotificationKind::DeliveryFixed, NotificationKind::DeliveryGaveUp], true));
+}
+
+/**
+ * Shoko's `GET /api/v3/File/{id}` answers, one per lookup: the Shoko series the
+ * file is linked to ([] = not linked yet). Register before fakeJellyfin() to
+ * override its default (linked), since the first fake for a URL wins.
+ *
+ * @param  array<int, int>  ...$links
+ */
+function fakeShoko(array ...$links): void
+{
+    $file = fn (array $series) => ['ID' => 2553, 'Size' => 1, 'SeriesIDs' => array_map(fn (int $id) => ['SeriesID' => ['ID' => $id, 'AniDB' => 19765], 'EpisodeIDs' => [['ID' => 6877, 'AniDB' => 317334]]], $series)];
+    $answers = Http::sequence();
+
+    foreach ($links as $series) {
+        $answers->push($file($series));
+    }
+
+    Http::fake(['http://shoko.test/api/v3/File/*' => $answers->whenEmpty(Http::response($file(end($links))))]);
 }
 
 function psyrenDelivery(): Delivery
@@ -692,4 +720,149 @@ test('repair forgets what was applied and replays the stored events from the sta
     expect(psyrenDelivery())->run->toBe(2)->state->toBe(DeliveryState::AwaitingSeries)
         ->and(appliedEvents(psyrenDelivery()))->toHaveCount(2);
     Queue::assertPushed(CheckDeliveryInJellyfin::class, fn ($job) => $job->run === 2 && $job->attempt === 1);
+});
+
+// ── Logging what Jellyfin answers to fixes ───────────────────────────────────
+
+test('every fix request logs Jellyfin\'s answer: status and body', function () {
+    Log::spy();
+    fakeJellyfin([true], [0, 0, 0, 4]);
+    downloaded();
+
+    replayPsyrenShoko();
+
+    Log::shouldHaveReceived('log')
+        ->withArgs(fn (string $level, string $message, array $context = []) => $level === 'info' && $message === 'Reconciler: Jellyfin answered a fix request'
+            && $context['status'] === 204 && $context['body'] === '(empty)' && str_starts_with($context['request'], 'POST /Items/series-1/Refresh')
+            && $context['query']['ReplaceAllMetadata'] === 'true')
+        ->once();
+});
+
+test('a refused fix is logged as an error with Jellyfin\'s body, and kept on the delivery', function () {
+    Log::spy();
+    $lookups = Http::sequence()->push(recentEpisodes(false))->push(recentEpisodes(false))->push(recentEpisodes(false));
+    fakeShoko([230]);
+    Http::fake([
+        'http://jellyfin.test/Items?*' => $lookups,
+        'http://jellyfin.test/Items/*' => Http::response('Access token is invalid or expired.', 401),
+    ]);
+    downloaded();
+
+    replayPsyrenShoko();
+
+    expect(psyrenDelivery())->state->toBe(DeliveryState::FixingA)
+        ->last_error->toBe('Fix A request failed: Jellyfin answered POST /Items/'.ANIME_LIBRARY.'/Refresh with HTTP 401: Access token is invalid or expired.');
+    Log::shouldHaveReceived('log')
+        ->withArgs(fn (string $level, string $message, array $context = []) => $level === 'error' && $context['status'] === 401 && $context['body'] === 'Access token is invalid or expired.')
+        ->once();
+});
+
+test('a refresh wait that ends by timeout says so in a warning; one ended by library.changed does not', function () {
+    Log::spy();
+    fakeJellyfin([false]);
+    $reconciler = app(DeliveryReconciler::class);
+    $release = downloaded();
+    $release->delivery->update(['shoko_file_id' => 2553, 'is_new_show' => true, 'state' => DeliveryState::AwaitingSeries]);
+
+    $reconciler->checkA($release->delivery->id, 1, DeliveryReconciler::INITIAL, 3);
+    app()->call([Queue::pushed(FinishLibraryRefresh::class)->first(), 'handle']);
+
+    Log::shouldHaveReceived('warning')
+        ->with('Reconciler: no LibraryChanged arrived for the Anime library refresh; re-checking after the timeout instead', ['deliveries' => 1, 'timeoutSeconds' => 300])
+        ->once();
+
+    $other = downloaded('[SubsPlease] Other - 01 (1080p) [EEEEEEEE].mkv');
+    $other->delivery->update(['shoko_file_id' => 3000, 'is_new_show' => true, 'state' => DeliveryState::AwaitingSeries]);
+    $reconciler->checkA($other->delivery->id, 1, DeliveryReconciler::INITIAL, 3);
+    replayLibraryChanged();
+
+    Log::shouldHaveReceived('info')->with('Reconciler: Anime library refresh finished (library.changed)', ['deliveries' => 1])->once();
+    Log::shouldHaveReceived('warning')->with('Reconciler: no LibraryChanged arrived for the Anime library refresh; re-checking after the timeout instead', Mockery::any())->once();
+});
+
+// ── Fix A waits for Shoko to link the file to its series ─────────────────────
+
+function shokoLookups(): int
+{
+    return collect(Http::recorded())->filter(fn (array $pair) => str_starts_with($pair[0]->url(), 'http://shoko.test/'))->count();
+}
+
+test('delivery #6: failure A while Shoko hasn\'t linked the file yet waits for the link, then fixes', function () {
+    fakeShoko([], [], [230]); // not linked when failure A is confirmed, nor at 1 min; linked at 3 min
+    fakeJellyfin([false, false, false, true], [4]);
+    downloaded();
+
+    foreach (shokoCapture() as $message) {
+        listen('shoko', $message);
+    }
+    drain(hold: [CheckShokoLink::class]);
+
+    expect(psyrenDelivery())->state->toBe(DeliveryState::AwaitingLink)
+        ->last_error->toBe("Shoko hasn't linked file 2553 to series 230 yet.")
+        ->and(jellyfinWrites())->toBe([]);
+    Queue::assertPushed(CheckShokoLink::class, fn ($job) => $job->attempt === 1 && $job->delay === 60);
+
+    drain();
+    Queue::assertPushed(CheckShokoLink::class, fn ($job) => $job->attempt === 2 && $job->delay === 120);
+    expect(jellyfinWrites())->toBe(['http://jellyfin.test/Items/'.ANIME_LIBRARY.'/Refresh?Recursive=true&MetadataRefreshMode=Default&ImageRefreshMode=Default&ReplaceAllMetadata=false'])
+        ->and(psyrenDelivery())->state->toBe(DeliveryState::FixingA)->last_error->toBeNull();
+    Queue::assertNotPushed(CheckShokoLink::class, fn ($job) => $job->attempt === 3);
+
+    replayLibraryChanged();
+
+    expect(psyrenDelivery())->state->toBe(DeliveryState::Playable)->fix_attempted->toBe(FixAttempted::A)
+        ->and(shokoLookups())->toBe(3);
+});
+
+test('a link that is there at once sends fix A straight away', function () {
+    fakeJellyfin([false], [4]);
+    downloaded();
+
+    replayPsyrenShoko();
+
+    expect(psyrenDelivery()->state)->toBe(DeliveryState::FixingA)
+        ->and(jellyfinWrites())->toHaveCount(1)
+        ->and(shokoLookups())->toBe(1);
+    Queue::assertNotPushed(CheckShokoLink::class);
+    Http::assertSent(fn (Request $request) => str_starts_with($request->url(), 'http://shoko.test/api/v3/File/2553?')
+        && str_contains($request->url(), 'include=XRefs') && $request->hasHeader('apikey', 'shoko-key'));
+});
+
+test('a link that never appears gives up after the last check, without sending fix A', function () {
+    fakeShoko([]);
+    fakeJellyfin([false]);
+    $release = downloaded();
+
+    replayPsyrenShoko();
+    drain();
+
+    expect(psyrenDelivery())->state->toBe(DeliveryState::GaveUp)
+        ->last_error->toBe("Failure A: Shoko didn't link file 2553 to series 230 within 30 minutes, so the Anime library refresh was not sent.")
+        ->and(jellyfinWrites())->toBe([])
+        ->and(shokoLookups())->toBe(5); // when failure A is confirmed, then at 1, 3, 10 and 30 min
+    foreach ([[2, 120], [3, 420], [4, 1200]] as [$attempt, $delay]) {
+        Queue::assertPushed(CheckShokoLink::class, fn ($job) => $job->attempt === $attempt && $job->delay === $delay);
+    }
+    Queue::assertPushed(SendNotification::class, fn ($job) => $job->kind === NotificationKind::DeliveryGaveUp && $job->releaseId === $release->id);
+});
+
+test('when Shoko can\'t be asked, the give-up reason says so', function () {
+    Http::fake(['http://shoko.test/*' => Http::response('', 503)]);
+    fakeJellyfin([false]);
+    downloaded();
+
+    replayPsyrenShoko();
+    drain();
+
+    expect(psyrenDelivery())->state->toBe(DeliveryState::GaveUp)
+        ->last_error->toBe("Failure A: Torii couldn't confirm within 30 minutes that Shoko linked file 2553 to its series (Shoko file lookup failed: Shoko answered GET /api/v3/File/2553 with HTTP 503.), so the Anime library refresh was not sent.")
+        ->and(jellyfinWrites())->toBe([]);
+});
+
+test('Shoko\'s file cross-references are read in either known shape', function () {
+    expect(ShokoClient::seriesIds(['SeriesIDs' => [['SeriesID' => ['ID' => 255, 'AniDB' => 19955], 'EpisodeIDs' => []], ['SeriesID' => ['ID' => 256]]]]))->toBe([255, 256])
+        ->and(ShokoClient::seriesIds(['CrossReferences' => [['SeriesID' => 255, 'AnidbAnimeID' => 19955], ['SeriesID' => null]]]))->toBe([255])
+        ->and(ShokoClient::seriesIds(['SeriesIDs' => []]))->toBe([])
+        ->and(ShokoClient::seriesIds(['ID' => 2721]))->toBe([])
+        ->and(ShokoClient::seriesIds('nope'))->toBe([]);
 });

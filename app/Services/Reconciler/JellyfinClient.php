@@ -45,6 +45,23 @@ final class JellyfinClient
         return null;
     }
 
+    /**
+     * Jellyfin's sessions for a device (`GET /Sessions?deviceId=…`), reduced to
+     * who they belong to. Diagnostics only: LibraryChanged goes to user sessions.
+     *
+     * @return array<int, array{id: string|null, userId: string|null, userName: string|null, client: string|null, lastActivity: string|null}>
+     */
+    public function sessionsForDevice(string $deviceId): array
+    {
+        return array_map(fn (array $session) => [
+            'id' => $session['Id'] ?? null,
+            'userId' => $session['UserId'] ?? null,
+            'userName' => $session['UserName'] ?? null,
+            'client' => $session['Client'] ?? null,
+            'lastActivity' => $session['LastActivityDate'] ?? null,
+        ], array_filter((array) $this->get('/Sessions', ['deviceId' => $deviceId])->json(), 'is_array'));
+    }
+
     /** How many episodes the series lists; 0 is failure B's signature. */
     public function seriesEpisodeCount(string $seriesId): int
     {
@@ -105,11 +122,22 @@ final class JellyfinClient
         try {
             $response = $this->request()->post($this->url($path).'?'.http_build_query($query));
         } catch (Throwable $e) {
+            logger()->error('Reconciler: Jellyfin fix request got no response', ['request' => "POST {$path}", 'query' => $query, 'error' => $e->getMessage()]);
+
             throw new RuntimeException("Jellyfin could not be reached: {$e->getMessage()}", previous: $e);
         }
 
+        // Every fix request's answer, accepted or not: a 204 is Jellyfin taking it on.
+        $body = mb_substr($response->body(), 0, 1000);
+        logger()->log($response->successful() ? 'info' : 'error', 'Reconciler: Jellyfin answered a fix request', [
+            'request' => "POST {$path}",
+            'query' => $query,
+            'status' => $response->status(),
+            'body' => $body === '' ? '(empty)' : $body,
+        ]);
+
         if (! $response->successful()) {
-            throw new RuntimeException("Jellyfin answered POST {$path} with HTTP {$response->status()}.");
+            throw new RuntimeException("Jellyfin answered POST {$path} with HTTP {$response->status()}".($body === '' ? '.' : ": {$body}"));
         }
     }
 

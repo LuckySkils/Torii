@@ -265,9 +265,11 @@ For a permanent setup, run these under systemd or Supervisor. Restart `queue:wor
 | `JELLYFIN_ANIME_LIBRARY_ID` | | The Jellyfin library Shokofin manages for series |
 | `JELLYFIN_DEVICE_ID` | `torii-reconciler` | Stable device id for the listener's Jellyfin connection |
 | `RECONCILER_BACKOFF` | `3,7,15` | Seconds after a trigger at which each check attempt runs |
+| `RECONCILER_LINK_BACKOFF` | `1,3,10,30` | Minutes after an episode is confirmed missing at which Torii asks Shoko again whether the file is linked to its series; the library refresh waits for that link |
 | `RECONCILER_LIBRARY_REFRESH_TIMEOUT` | `300` | Seconds to wait for a library refresh's completion event before re-checking anyway |
 | `RECONCILER_LISTENER_LIFETIME` | `86400` | The listener exits after this many seconds and Docker restarts it |
 | `RECONCILER_NOTIFY_ON_FIX` | `true` | Also notify when an automatic fix worked (giving up always notifies) |
+| `RECONCILER_DEBUG` | `false` | Log the type of every Jellyfin and Shoko event the listener receives, Shoko's file lookups, and which Jellyfin user the listener's session belongs to (for diagnosing missing events) |
 
 In qBittorrent, RSS processing and RSS auto-downloading must be enabled. `php artisan qbit:setup --fix-prefs` turns them on for you.
 
