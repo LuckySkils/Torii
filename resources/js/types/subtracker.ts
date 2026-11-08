@@ -73,6 +73,41 @@ export interface BootstrapProgress {
     tasks: { key: string; label: string; state: BootstrapTaskState; error: string | null }[];
 }
 
+/**
+ * Where a downloaded episode is on its way to being playable in Jellyfin (§17,
+ * App\Enums\DeliveryState). `awaiting_link`: Shoko hasn't linked the file to its
+ * series yet, so the library refresh waits for it (a waiting state, not a failure).
+ */
+export type DeliveryState =
+    | 'downloaded'
+    | 'matched'
+    | 'awaiting_series'
+    | 'in_jellyfin'
+    | 'awaiting_link'
+    | 'fixing_a'
+    | 'fixing_b'
+    | 'playable'
+    | 'gave_up';
+
+/** Which reconciler fixes ran (App\Enums\FixAttempted). */
+export type DeliveryFixAttempted = 'none' | 'a' | 'b' | 'a_then_b';
+
+/** Delivery::toProps(): a release's trail towards Jellyfin, when the reconciler tracks it (§17). */
+export interface Delivery {
+    state: DeliveryState;
+    isNewShow: boolean;
+    fixAttempted: DeliveryFixAttempted;
+    /** Dry run: the fixes it would have sent, as text ("fix A (refresh the Anime library), then fix B (…)"). */
+    wouldHaveFixed: string | null;
+    lastError: string | null;
+    stages: {
+        matchedAt: string | null;
+        inJellyfinAt: string | null;
+        playableAt: string | null;
+        gaveUpAt: string | null;
+    };
+}
+
 export interface ReleaseShowRef {
     id: number;
     name: string;
@@ -95,6 +130,8 @@ export interface ReleaseSummary {
     dispatchedAt: string | null;
     dispatchError: string | null;
     downloadedAt: string | null;
+    /** Null when the reconciler doesn't track it (off, a batch, not downloaded yet). */
+    delivery: Delivery | null;
 }
 
 /** LatestReleaseResource — the Release shape, with poster fields on `show` and two novelty flags. */
