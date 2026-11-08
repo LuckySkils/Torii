@@ -109,6 +109,8 @@ class Release extends Model
             ->whereIn('show_id', $showIds)
             ->when($downloadedOnly, fn ($query) => $query->whereNotNull('downloaded_at'))
             ->groupBy('show_id')
+            // Deterministic key order: without it Postgres returns groups in plan order.
+            ->orderBy('show_id')
             ->selectRaw("show_id, max(greatest(
                 case when not is_batch and episode ~ '^[0-9]+([.][0-9]+)?$' then episode::numeric end,
                 case when is_batch then batch_to end
