@@ -4,21 +4,18 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
-use App\Contracts\MetadataProvider;
 use App\Jobs\FetchAnimeCover;
 use App\Models\Anime;
 use App\Models\Show;
 use App\Models\ShowAnimeLink;
 use App\Models\ShowAnimeSuggestion;
-use App\Services\Metadata\AnimeSyncer;
+use App\Services\Metadata\AnimeProviderSearch;
 use App\Services\Metadata\Matching\AnimeMatcher;
 use App\Services\Metadata\Matching\ShowAnimeLinker;
 use App\Services\Metadata\Matching\TitleNormalizer;
-use App\Services\Metadata\MetadataProviderException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\Relation;
-use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -46,8 +43,7 @@ class AnimeLinkController extends Controller
     public function search(
         Request $request,
         Show $show,
-        MetadataProvider $provider,
-        AnimeSyncer $syncer,
+        AnimeProviderSearch $providerSearch,
         AnimeMatcher $matcher,
         TitleNormalizer $normalizer,
     ): JsonResponse {
@@ -69,15 +65,8 @@ class AnimeLinkController extends Controller
 
         if ($results->count() < self::MIN_LOCAL_RESULTS || ! $localHasSeason) {
             $providerSearched = true;
-
-            try {
-                foreach ($provider->search($searchedQuery, 10) as $entry) {
-                    $results->push($syncer->upsert($entry)->anime);
-                }
-            } catch (MetadataProviderException|ConnectionException $e) {
-                $providerError = $e->getMessage();
-                logger()->warning('Metadata provider search failed', ['query' => $searchedQuery, 'error' => $e->getMessage()]);
-            }
+            ['anime' => $found, 'error' => $providerError] = $providerSearch->search($searchedQuery, 10);
+            $results->push(...$found);
         }
 
         $rows = $this->withResultRelations(Anime::query()->whereKey($results->pluck('id')->unique()->all()))

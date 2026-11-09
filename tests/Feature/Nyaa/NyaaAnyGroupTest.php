@@ -113,7 +113,7 @@ test('preview: items from several groups are grouped into series by their sugges
         ->and($series['Black Clover S2'])->toMatchArray([
             'key' => 'blackclover|s2', 'parsedName' => 'Black Clover S2', 'season' => 2, 'suggestedName' => 'Black Clover S2',
             'altTitles' => [], 'groups' => ['SubsPlease', 'Judas'], 'itemKeys' => ['4', '5', '6'],
-            'target' => ['kind' => 'new', 'name' => 'Black Clover S2', 'trackable' => true, 'trackBlockedReason' => null], 'candidates' => [],
+            'target' => ['kind' => 'new', 'name' => 'Black Clover S2', 'trackable' => true, 'trackBlockedReason' => null, 'anime' => null], 'candidates' => [],
         ])
         ->and($series['Demons Crest'])->toMatchArray([
             'key' => 'demonscrest|s1', 'season' => null, 'groups' => ['SubsPlease', 'Erai-raws'], 'itemKeys' => ['1', '2', '3'],
@@ -122,7 +122,7 @@ test('preview: items from several groups are grouped into series by their sugges
             'key' => 'tankchair|s1', 'parsedName' => 'TANK CHAIR', 'season' => 1, 'altTitles' => ['TANK CHAIR: Sensha Isu', 'Sensha Isu'],
             'groups' => ['ToonsHub'], 'target' => [
                 'kind' => 'new', 'name' => 'TANK CHAIR', 'trackable' => false,
-                'trackBlockedReason' => BLOCKED_REASON,
+                'trackBlockedReason' => BLOCKED_REASON, 'anime' => null,
             ],
         ]);
 
@@ -206,14 +206,14 @@ test('suggestion rules 1 and 2: an exact name, then a normalized name or alt tit
 
     $series = seriesByName(nyaaPreview());
 
-    expect($series['Black Clover S2']['target'])->toBe(['kind' => 'existing', 'showId' => $exact->id, 'showName' => 'Black Clover S2', 'trackable' => false, 'trackBlockedReason' => BLOCKED_REASON])
+    expect($series['Black Clover S2']['target'])->toBe(['kind' => 'existing', 'showId' => $exact->id, 'showName' => 'Black Clover S2', 'trackable' => false, 'trackBlockedReason' => BLOCKED_REASON, 'anime' => null])
         ->and($series['Black Clover S2']['candidates'])->toBe([
-            ['showId' => $exact->id, 'showName' => 'Black Clover S2', 'why' => "Named exactly 'Black Clover S2'.", 'score' => 100, 'trackable' => false],
+            ['kind' => 'show', 'showId' => $exact->id, 'showName' => 'Black Clover S2', 'why' => "Named exactly 'Black Clover S2'.", 'score' => 100, 'trackable' => false],
         ])
         ->and($series['Demons Crest']['target'])->toMatchArray(['kind' => 'existing', 'showId' => $sameName->id])
         ->and($series['Demons Crest']['candidates'][0]['why'])->toBe("Same name as 'Demons Crest', ignoring case, punctuation and season wording.")
         ->and($series['Demons Crest']['candidates'][0]['score'])->toBe(95)
-        ->and($series['TANK CHAIR']['target'])->toBe(['kind' => 'existing', 'showId' => $alt->id, 'showName' => 'Sensha Isu', 'trackable' => true, 'trackBlockedReason' => null])
+        ->and($series['TANK CHAIR']['target'])->toBe(['kind' => 'existing', 'showId' => $alt->id, 'showName' => 'Sensha Isu', 'trackable' => true, 'trackBlockedReason' => null, 'anime' => null])
         ->and($series['TANK CHAIR']['candidates'][0]['why'])->toBe("Same name as the alt title 'Sensha Isu' in the release title.");
 });
 
@@ -224,14 +224,14 @@ test('suggestion rule 3: a clear anime winner with a linked show is the target; 
 
     $series = nyaaPreview()['series'][0];
 
-    expect($series['target'])->toBe(['kind' => 'existing', 'showId' => $winner->id, 'showName' => 'Tanku Cheaa', 'trackable' => false, 'trackBlockedReason' => BLOCKED_REASON])
+    expect($series['target'])->toBe(['kind' => 'existing', 'showId' => $winner->id, 'showName' => 'Tanku Cheaa', 'trackable' => false, 'trackBlockedReason' => BLOCKED_REASON, 'anime' => null])
         ->and($series['candidates'])->toBe([
-            ['showId' => $winner->id, 'showName' => 'Tanku Cheaa', 'why' => "AniList title 'Sensha Isu' of the linked anime.", 'score' => 100, 'trackable' => false],
-            ['showId' => $runnerUp->id, 'showName' => 'Other Tank', 'why' => "AniList title 'Sensha Isuu' of the linked anime.", 'score' => 71, 'trackable' => false],
+            ['kind' => 'show', 'showId' => $winner->id, 'showName' => 'Tanku Cheaa', 'why' => "Anime title 'Sensha Isu' of the linked anime.", 'score' => 100, 'trackable' => false],
+            ['kind' => 'show', 'showId' => $runnerUp->id, 'showName' => 'Other Tank', 'why' => "Anime title 'Sensha Isuu' of the linked anime.", 'score' => 71, 'trackable' => false],
         ]);
 });
 
-test('suggestion rule 3: close anime matches only become candidates; rejected pairs are never offered; no match is a new show', function () {
+test('suggestion rule 3: close anime matches only become candidates; a rejected pair never offers its show, so that anime counts as unlinked', function () {
     $a = mcpLinkedShow(metadataAnime(['title_romaji' => 'Demons Crest']), 'Akuma no Monshou');
     $b = mcpLinkedShow(metadataAnime(['title_english' => 'Demons Crest']), 'Demons Crest Other');
     $rejectedAnime = metadataAnime(['title_romaji' => 'Demons Crest!']);
@@ -241,9 +241,13 @@ test('suggestion rule 3: close anime matches only become candidates; rejected pa
 
     $series = nyaaPreview()['series'][0];
 
-    expect($series['target'])->toBe(['kind' => 'new', 'name' => 'Demons Crest', 'trackable' => false, 'trackBlockedReason' => BLOCKED_REASON])
+    // Its only link rejected, "Demons Crest!" has no show for this purpose (as matching sees it): an anime candidate.
+    expect($series['target'])->toBe(['kind' => 'new', 'name' => 'Demons Crest', 'trackable' => false, 'trackBlockedReason' => BLOCKED_REASON, 'anime' => null])
+        ->and(array_column($series['candidates'], 'kind'))->toBe(['show', 'show', 'anime'])
         ->and(array_column($series['candidates'], 'showId'))->toBe([$a->id, $b->id])
-        ->and(array_column($series['candidates'], 'score'))->toBe([100, 100]);
+        ->and($series['candidates'][2]['anime']['id'])->toBe($rejectedAnime->id)
+        ->and($series['candidates'][2]['why'])->toBe("Anime title 'Demons Crest!', no show yet.")
+        ->and(array_column($series['candidates'], 'score'))->toBe([100, 100, 100]);
 });
 
 function mcpLinkedShow(Anime $anime, string $name): Show
@@ -286,7 +290,7 @@ test('retarget: to an existing show, a new name, and a new name that already exi
     $updated = retarget($preview, 'blackclover|s2', ['showId' => $other->id])->assertOk()->json();
     $items = collect($updated['items'])->keyBy('key');
 
-    expect(seriesByName($updated)['Black Clover S2']['target'])->toBe(['kind' => 'existing', 'showId' => $other->id, 'showName' => 'Burakku Kurobaa S2', 'trackable' => true, 'trackBlockedReason' => null])
+    expect(seriesByName($updated)['Black Clover S2']['target'])->toBe(['kind' => 'existing', 'showId' => $other->id, 'showName' => 'Burakku Kurobaa S2', 'trackable' => true, 'trackBlockedReason' => null, 'anime' => null])
         ->and([$items['6']['state'], $items['4']['state'], $items['5']['state']])->toBe(['have_episode', 'have_episode', 'new'])
         ->and($items['6'])->not->toHaveKey('inQbit')
         ->and($updated['previewId'])->toBe($preview['previewId']);
@@ -295,7 +299,7 @@ test('retarget: to an existing show, a new name, and a new name that already exi
     $updated = retarget($preview, 'blackclover|s2', ['newName' => '  Black Clover Season 2  '])->assertOk()->json();
     $items = collect($updated['items'])->keyBy('key');
 
-    expect(seriesByName($updated)['Black Clover S2']['target'])->toBe(['kind' => 'new', 'name' => 'Black Clover Season 2', 'trackable' => true, 'trackBlockedReason' => null])
+    expect(seriesByName($updated)['Black Clover S2']['target'])->toBe(['kind' => 'new', 'name' => 'Black Clover Season 2', 'trackable' => true, 'trackBlockedReason' => null, 'anime' => null])
         ->and([$items['6']['state'], $items['4']['state']])->toBe(['new', 'duplicate_episode']);
 
     // A new name some show has exactly becomes that show.
@@ -377,9 +381,9 @@ test('confirm: items land on their series\' targets, a new show is created once,
 
     expect($result)->toMatchArray(['queued' => 4, 'skipped' => [], 'errors' => []])
         ->and(collect($result['shows'])->sortBy('name')->values()->all())->toBe([
-            ['id' => $blackClover->id, 'name' => 'Black Clover (2017) S2', 'created' => true],
-            ['id' => $demonsCrest->id, 'name' => 'Demons Crest', 'created' => true],
-            ['id' => $sensha->id, 'name' => 'Sensha Isu', 'created' => false],
+            ['id' => $blackClover->id, 'name' => 'Black Clover (2017) S2', 'created' => true, 'linkedAnime' => null],
+            ['id' => $demonsCrest->id, 'name' => 'Demons Crest', 'created' => true, 'linkedAnime' => null],
+            ['id' => $sensha->id, 'name' => 'Sensha Isu', 'created' => false, 'linkedAnime' => null],
         ])
         ->and(Show::where('name', 'Demons Crest')->count())->toBe(1)
         ->and([$release(2)->show_id, $release(3)->show_id, $release(5)->show_id, $release(7)->show_id])->toBe([$demonsCrest->id, $demonsCrest->id, $blackClover->id, $sensha->id])
@@ -578,7 +582,7 @@ test('real title (Erai-raws, live nyaa.si 2026-11-08): "Season 2" in the name su
     $series = nyaaPreview()['series'][0];
 
     expect($series)->toMatchArray(['key' => 'aonohako|s2', 'suggestedName' => 'Ao no Hako S2', 'season' => 2])
-        ->and($series['target'])->toBe(['kind' => 'existing', 'showId' => $show->id, 'showName' => 'Ao no Hako S2', 'trackable' => true, 'trackBlockedReason' => null])
+        ->and($series['target'])->toBe(['kind' => 'existing', 'showId' => $show->id, 'showName' => 'Ao no Hako S2', 'trackable' => true, 'trackBlockedReason' => null, 'anime' => null])
         ->and($series['candidates'][0]['why'])->toBe("Named exactly 'Ao no Hako S2'.");
 });
 
@@ -597,23 +601,28 @@ test('real title (Erai-raws, live nyaa.si 2026-11-08): Hyouken II finds the Subs
     // Before the fold this was a new show with the show as a similarity candidate (81).
     expect($series)->toMatchArray(['suggestedName' => 'Hyouken no Majutsushi ga Sekai o Suberu S2', 'season' => 2])
         ->and($series['target'])->toBe([
-            'kind' => 'existing', 'showId' => $show->id, 'showName' => 'Hyouken no Majutsushi ga Sekai wo Suberu S2', 'trackable' => true, 'trackBlockedReason' => null,
+            'kind' => 'existing', 'showId' => $show->id, 'showName' => 'Hyouken no Majutsushi ga Sekai wo Suberu S2', 'trackable' => true, 'trackBlockedReason' => null, 'anime' => null,
         ])
         ->and($series['candidates'])->toBe([[
-            'showId' => $show->id, 'showName' => 'Hyouken no Majutsushi ga Sekai wo Suberu S2',
+            'kind' => 'show', 'showId' => $show->id, 'showName' => 'Hyouken no Majutsushi ga Sekai wo Suberu S2',
             'why' => "Same name as 'Hyouken no Majutsushi ga Sekai o Suberu S2', ignoring case, punctuation and season wording.", 'score' => 95, 'trackable' => true,
         ]]);
 });
 
 // ── Target decision: a single candidate >= 90 with no runner-up within 10 ────
 
-test('target: a lone strong anime candidate wins even when an unlinked anime scores as high', function () {
-    // Constructed: two anime both named "Sensha Isu", only one linked. Before, the anime-level tie blocked it.
+test('target: a linked anime\'s show and an unlinked anime scoring as high are a tie: a new show, both offered (show first)', function () {
+    // Constructed: two anime both named "Sensha Isu", only one linked. The unlinked one is a candidate itself now,
+    // so the two are runners-up to each other and nothing is picked.
     $linked = mcpLinkedShow(metadataAnime(['title_romaji' => 'Sensha Isu']), 'Tanku Cheaa');
-    metadataAnime(['title_romaji' => 'Sensha Isu', 'title_english' => 'Tank Chair (unlinked)']);
+    $unlinked = metadataAnime(['title_romaji' => 'Sensha Isu', 'title_english' => 'Tank Chair (unlinked)']);
     fakeNyaa([['title' => TOONSHUB_S01E06, 'id' => 7, 'hash' => hashFor('toons-06')]]);
 
-    expect(nyaaPreview()['series'][0]['target'])->toMatchArray(['kind' => 'existing', 'showId' => $linked->id]);
+    $series = nyaaPreview()['series'][0];
+
+    expect($series['target'])->toMatchArray(['kind' => 'new', 'name' => 'TANK CHAIR', 'anime' => null])
+        ->and(array_map(fn (array $c) => [$c['kind'], $c['showId'] ?? $c['anime']['id'], $c['score']], $series['candidates']))
+        ->toBe([['show', $linked->id, 100], ['anime', $unlinked->id, 100]]);
 });
 
 test('target: two close candidates from any rule give a new show; an exact name still wins over a close one', function () {

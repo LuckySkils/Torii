@@ -526,20 +526,39 @@ export interface NyaaPreviewItem {
     reason: string | null;
 }
 
-/** Where a series' items go: an existing show, or a show created on confirm. */
-export type NyaaTarget =
-    | { kind: 'existing'; showId: number; showName: string; trackable: boolean; trackBlockedReason: string | null }
-    | { kind: 'new'; name: string; trackable: boolean; trackBlockedReason: string | null };
-
-/** A show the backend thinks the series may belong to; best first, at most 5. */
-export interface NyaaCandidate {
-    showId: number;
-    showName: string;
-    /** e.g. "same name", "AniList title 'Sensha Isu' of the linked anime." */
-    why: string;
-    score: number;
-    trackable: boolean;
+/**
+ * An anime from Torii's catalog, as the Nyaa import shows it. `title` is the
+ * English title, else the romaji one, else "#id". `coverUrl` is Torii's own
+ * cover URL, null until the cover is downloaded.
+ */
+export interface NyaaAnimeRef {
+    id: number;
+    title: string;
+    titleRomaji: string | null;
+    titleEnglish: string | null;
+    season: string | null;
+    seasonYear: number | null;
+    format: string | null;
+    coverUrl: string | null;
 }
+
+/**
+ * Where a series' items go: an existing show, or a show created on confirm.
+ * `anime` is the anime confirming links the show to: on `new`, the new show's
+ * anime (null = no link); on `existing`, only for an unlinked show picked
+ * through an anime.
+ */
+export type NyaaTarget =
+    | { kind: 'existing'; showId: number; showName: string; trackable: boolean; trackBlockedReason: string | null; anime: NyaaAnimeRef | null }
+    | { kind: 'new'; name: string; trackable: boolean; trackBlockedReason: string | null; anime: NyaaAnimeRef | null };
+
+/**
+ * Where the series may belong; one list, best first, at most 5 (ties: shows first).
+ * An anime candidate is an anime with no show yet: picking it means a new show linked to it.
+ */
+export type NyaaCandidate =
+    | { kind: 'show'; showId: number; showName: string; why: string; score: number; trackable: boolean }
+    | { kind: 'anime'; anime: NyaaAnimeRef; why: string; score: number; trackable: boolean };
 
 /** Items the backend groups as one show (e.g. Black Clover S2 from Judas and Erai-raws together). */
 export interface NyaaSeries {
@@ -571,9 +590,20 @@ export interface NyaaPreview {
     warnings: string[];
 }
 
-/** GET /import/nyaa/shows?q= — the target picker's search, at most 20. */
+/** An anime in the target picker's search, with the shows already linked to it. */
+export type NyaaAnimeHit = NyaaAnimeRef & { linkedShows: { id: number; name: string }[] };
+
+/**
+ * GET /import/nyaa/shows?q=&provider=1 — the target picker's search: shows by
+ * name (at most 20) and anime (at most 10, 20 with the online search).
+ */
 export interface NyaaShowSearch {
     shows: { id: number; name: string; isTracked: boolean; trackable: boolean; latestEpisode: string | null }[];
+    anime: NyaaAnimeHit[];
+    /** True only with provider=1, a non-empty q and within the limit. */
+    providerSearched: boolean;
+    /** A neutral text when the online search was busy or failed; the local rows are still there. */
+    providerError: string | null;
 }
 
 /** POST /import/nyaa/confirm */
@@ -581,7 +611,10 @@ export interface NyaaConfirmResult {
     queued: number;
     skipped: { key: string; title: string; reason: string }[];
     errors: { key: string; title: string; message: string }[];
-    shows: { id: number; name: string; created: boolean }[];
+    /** `linkedAnime`: the show's anime link after the import, whatever its source. */
+    shows: { id: number; name: string; created: boolean; linkedAnime: { id: number; title: string } | null }[];
+    /** Linking notes, e.g. an anime that got another show meanwhile. */
+    warnings: string[];
 }
 
 /** GET /anime/{id}/card — the hover/tap detail card (AnimeController::card, cached 2 minutes). */

@@ -5,9 +5,12 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { animeSeasonLabel, formatLabel } from '@/lib/anime';
 import { getJson, HttpError, postJson } from '@/lib/http';
 import { cn, TOUCH_TARGET_SM } from '@/lib/utils';
 import {
+    type NyaaAnimeHit,
+    type NyaaAnimeRef,
     type NyaaConfirmResult,
     type NyaaPreview,
     type NyaaPreviewItem,
@@ -24,15 +27,17 @@ import {
     ExternalLink,
     Import,
     Info,
+    Link2,
     Loader2,
+    Pencil,
     Plus,
     Search,
     ShieldCheck,
     TriangleAlert,
 } from 'lucide-react';
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { toast } from 'sonner';
+import { createContext, useContext, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Hint } from './hint';
+import { ShowPoster } from './show-poster';
 
 /** "Import from Nyaa": the button that opens the dialog, sized like the toolbar buttons around it. */
 export function NyaaImportButton({ className, label = 'Import from Nyaa' }: { className?: string; label?: string }) {
@@ -102,8 +107,21 @@ export function NyaaImportDialog({ open, onOpenChange }: { open: boolean; onOpen
 
 type Step = { kind: 'url' } | { kind: 'preview'; preview: NyaaPreview } | { kind: 'done'; result: NyaaConfirmResult };
 
-/** What a retarget asks for: an existing show, or a show created with this name on confirm. */
-type TargetChoice = { showId: number } | { newName: string };
+/**
+ * What a retarget asks for: an existing show; a show created with this name on
+ * confirm; or an anime (its one linked show, else a new show linked to it).
+ */
+type TargetChoice = { showId: number } | { newName: string } | { animeId: number; newName?: string };
+
+/** Sends a retarget; resolves to the message to show where it was asked, or null when done (or handled elsewhere). */
+type Retarget = (target: TargetChoice) => Promise<string | null>;
+
+/**
+ * Queries already searched online in this dialog session (normalized). The
+ * online search is rate-limited, and its results are stored in the catalog, so a
+ * repeated query finds them in the local search anyway.
+ */
+const OnlineSearchedContext = createContext<Set<string>>(new Set());
 
 /** Keys the user can tick: every item of a series. Unparsed items have no show to go to. */
 function selectableKeys(preview: NyaaPreview): Set<string> {
@@ -125,6 +143,7 @@ function ImportFlow({ onClose }: { onClose: () => void }) {
     const [retargeting, setRetargeting] = useState<string | null>(null);
     const [error, setError] = useState<{ message: string; expired: boolean } | null>(null);
     const controllerRef = useRef<AbortController | null>(null);
+    const [onlineSearched] = useState(() => new Set<string>());
 
     // Closing the dialog unmounts this: a preview still loading is abandoned.
     useEffect(() => () => controllerRef.current?.abort(), []);
@@ -159,21 +178,25 @@ function ImportFlow({ onClose }: { onClose: () => void }) {
         }
     }
 
-    async function retarget(current: NyaaPreview, seriesKey: string, target: TargetChoice) {
+    async function retarget(current: NyaaPreview, seriesKey: string, target: TargetChoice): Promise<string | null> {
         setRetargeting(seriesKey);
 
         try {
             const next = await postJson<NyaaPreview>(`/import/nyaa/preview/${encodeURIComponent(current.previewId)}/target`, { seriesKey, target });
             // The response is the whole preview, states and suggested selection recomputed.
-            // Only this series' items can change, so they take the new suggestion; the
-            // other series keep whatever was ticked by hand.
+            // This series' items take the new suggestion. So does any other item whose
+            // suggestion changed: copies of one episode in other series pointed at the same
+            // show become (or stop being) duplicates. Everything else keeps what was ticked by hand.
             const changed = new Set(next.series.find((series) => series.key === seriesKey)?.itemKeys ?? []);
+            const suggestedBefore = new Map(current.items.map((item) => [item.key, item.selected]));
             const selectable = selectableKeys(next);
             setSelected((previous) => {
                 const merged = new Set<string>();
 
                 for (const item of next.items) {
-                    if (selectable.has(item.key) && (changed.has(item.key) ? item.selected : previous.has(item.key))) {
+                    const follow = changed.has(item.key) || suggestedBefore.get(item.key) !== item.selected;
+
+                    if (selectable.has(item.key) && (follow ? item.selected : previous.has(item.key))) {
                         merged.add(item.key);
                     }
                 }
@@ -181,14 +204,17 @@ function ImportFlow({ onClose }: { onClose: () => void }) {
                 return merged;
             });
             setStep({ kind: 'preview', preview: next });
+
+            return null;
         } catch (caught) {
             if (caught instanceof HttpError && caught.fields.includes('previewId')) {
                 setStep({ kind: 'url' });
                 setError({ message: caught.message, expired: false });
-                return;
+                return null;
             }
 
-            toast.error(caught instanceof HttpError ? caught.message : "Couldn't change where these releases go.");
+            // Shown inline where the choice was made; the preview stays as it was.
+            return caught instanceof HttpError ? caught.message : "Couldn't change where these releases go.";
         } finally {
             setRetargeting(null);
         }
@@ -226,21 +252,23 @@ function ImportFlow({ onClose }: { onClose: () => void }) {
 
     if (step.kind === 'preview') {
         return (
-            <PreviewStep
-                preview={step.preview}
-                selected={selected}
-                onSelect={setSelected}
-                busy={busy}
-                retargeting={retargeting}
-                error={error}
-                onBack={() => {
-                    setError(null);
-                    setStep({ kind: 'url' });
-                }}
-                onRepreview={() => preview()}
-                onRetarget={(seriesKey, target) => retarget(step.preview, seriesKey, target)}
-                onConfirm={() => confirm(step.preview.previewId)}
-            />
+            <OnlineSearchedContext.Provider value={onlineSearched}>
+                <PreviewStep
+                    preview={step.preview}
+                    selected={selected}
+                    onSelect={setSelected}
+                    busy={busy}
+                    retargeting={retargeting}
+                    error={error}
+                    onBack={() => {
+                        setError(null);
+                        setStep({ kind: 'url' });
+                    }}
+                    onRepreview={() => preview()}
+                    onRetarget={(seriesKey, target) => retarget(step.preview, seriesKey, target)}
+                    onConfirm={() => confirm(step.preview.previewId)}
+                />
+            </OnlineSearchedContext.Provider>
         );
     }
 
@@ -374,7 +402,7 @@ interface PreviewStepProps {
     error: { message: string; expired: boolean } | null;
     onBack: () => void;
     onRepreview: () => void;
-    onRetarget: (seriesKey: string, target: TargetChoice) => void;
+    onRetarget: (seriesKey: string, target: TargetChoice) => Promise<string | null>;
     onConfirm: () => void;
 }
 
@@ -550,7 +578,7 @@ interface SeriesSectionProps {
     /** While its target is being changed (or anything else runs): no ticking, no picking. */
     disabled: boolean;
     retargeting: boolean;
-    onRetarget: (target: TargetChoice) => void;
+    onRetarget: Retarget;
 }
 
 function SeriesSection({ series, items, selected, onSetMany, disabled, retargeting, onRetarget }: SeriesSectionProps) {
@@ -627,59 +655,232 @@ function TrackBlockedNote({ reason }: { reason: string | null }) {
     );
 }
 
-function TargetPicker({ series, busy, onChoose }: { series: NyaaSeries; busy: boolean; onChoose: (target: TargetChoice) => void }) {
-    const [open, setOpen] = useState(false);
-    const panelId = useId();
-    const { target } = series;
+/** A small cover beside an anime's title; a muted placeholder until the cover is downloaded. */
+function AnimeThumb({ anime, className }: { anime: NyaaAnimeRef; className?: string }) {
+    return (
+        <ShowPoster
+            imageUrl={anime.coverUrl}
+            imageStatus={anime.coverUrl ? 'found' : 'missing'}
+            name={anime.title}
+            className={cn('w-9 rounded-sm', className)}
+        />
+    );
+}
 
-    function choose(choice: TargetChoice) {
-        setOpen(false);
-        onChoose(choice);
+/** "Autumn 2026 · TV", or whichever half is known. */
+function animeFacts(anime: NyaaAnimeRef): string {
+    return [animeSeasonLabel(anime.season, anime.seasonYear), formatLabel(anime.format)].filter(Boolean).join(' · ');
+}
+
+/** The anime's cover, title and facts: the "Goes to" button of a new show linked to it. */
+function AnimeSummary({ anime }: { anime: NyaaAnimeRef }) {
+    const facts = animeFacts(anime);
+
+    return (
+        <span className="flex min-w-0 items-center gap-2.5">
+            <AnimeThumb anime={anime} className="w-8" />
+            <span className="flex min-w-0 flex-col">
+                <span className="font-medium break-words">{anime.title}</span>
+                {facts && <span className="text-xs font-normal text-muted-foreground">{facts}</span>}
+            </span>
+        </span>
+    );
+}
+
+function TargetLabel({ target }: { target: NyaaTarget }) {
+    if (target.kind === 'existing') {
+        return <span className="min-w-0 break-words">{target.showName}</span>;
+    }
+
+    if (target.anime) {
+        return <AnimeSummary anime={target.anime} />;
     }
 
     return (
-        <div className="flex flex-col gap-2 border-b px-3 py-2 sm:px-6">
-            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                <span className="text-muted-foreground">Goes to</span>
-                <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-auto min-h-8 max-w-full justify-between gap-1.5 py-1 text-left whitespace-normal"
-                    aria-expanded={open}
-                    aria-controls={panelId}
-                    onClick={() => setOpen((value) => !value)}
-                >
-                    <span className="min-w-0 break-words">
-                        {target.kind === 'new' ? (
-                            <>
-                                <span className="font-normal text-muted-foreground">New show: </span>
-                                {target.name}
-                            </>
+        <span className="min-w-0 break-words">
+            <span className="font-normal text-muted-foreground">New show: </span>
+            {target.name}
+        </span>
+    );
+}
+
+function TargetPicker({ series, busy, onChoose }: { series: NyaaSeries; busy: boolean; onChoose: Retarget }) {
+    const [open, setOpen] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const panelId = useId();
+    const { target } = series;
+    const newShowAnime = target.kind === 'new' ? target.anime : null;
+
+    /** A choice in the panel: it closes once the preview has the new target; a refusal stays inside it. */
+    async function choose(choice: TargetChoice) {
+        setError(null);
+        const failure = await onChoose(choice);
+
+        if (failure === null) {
+            setOpen(false);
+        } else {
+            setError(failure);
+        }
+    }
+
+    return (
+        <div className="flex flex-col gap-2 border-b px-3 py-2 text-sm sm:px-6">
+            <div className="flex items-start gap-2">
+                <span className="shrink-0 pt-1.5 text-muted-foreground">Goes to</span>
+                <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-auto min-h-8 max-w-full justify-between gap-1.5 py-1 text-left whitespace-normal"
+                            aria-expanded={open}
+                            aria-controls={panelId}
+                            onClick={() => {
+                                setError(null);
+                                setOpen((value) => !value);
+                            }}
+                        >
+                            <TargetLabel target={target} />
+                            {busy ? (
+                                <Loader2 className="size-4 shrink-0 animate-spin" />
+                            ) : (
+                                <ChevronDown className={cn('size-4 shrink-0 transition-transform', open && 'rotate-180')} />
+                            )}
+                        </Button>
+                        {target.kind === 'existing' ? (
+                            <OpenLink href={`/shows/${target.showId}`}>open show</OpenLink>
                         ) : (
-                            target.showName
+                            target.anime && <OpenLink href={`/anime/${target.anime.id}`}>open anime</OpenLink>
                         )}
-                    </span>
-                    {busy ? (
-                        <Loader2 className="size-4 shrink-0 animate-spin" />
-                    ) : (
-                        <ChevronDown className={cn('size-4 shrink-0 transition-transform', open && 'rotate-180')} />
+                        {!target.trackable && <TrackBlockedNote reason={target.trackBlockedReason} />}
+                    </div>
+
+                    {target.kind === 'new' && newShowAnime && (
+                        <NewLinkedShowName
+                            key={`${newShowAnime.id}:${target.name}`}
+                            name={target.name}
+                            onRename={(newName) => onChoose({ animeId: newShowAnime.id, newName })}
+                        />
                     )}
-                </Button>
-                {target.kind === 'existing' && (
-                    <Link
-                        href={`/shows/${target.showId}`}
-                        className="inline-flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground hover:underline"
-                    >
-                        open show
-                        <ArrowRight className="size-3" aria-hidden />
-                    </Link>
-                )}
-                {!target.trackable && <TrackBlockedNote reason={target.trackBlockedReason} />}
+                    {target.kind === 'existing' && target.anime && (
+                        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                            <Link2 className="mt-px size-3.5 shrink-0" aria-hidden />
+                            <span>
+                                Will be linked to <span className="font-medium text-foreground">{target.anime.title}</span>
+                            </span>
+                        </p>
+                    )}
+                </div>
             </div>
 
-            {open && <TargetPanel id={panelId} series={series} onChoose={choose} />}
+            {/* Full width under the target, so phones don't lose the label's column. */}
+            {open && <TargetPanel id={panelId} series={series} error={error} onChoose={choose} />}
         </div>
+    );
+}
+
+function OpenLink({ href, children }: { href: string; children: ReactNode }) {
+    return (
+        <Link href={href} className="inline-flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground hover:underline">
+            {children}
+            <ArrowRight className="size-3" aria-hidden />
+        </Link>
+    );
+}
+
+/**
+ * "New show X will be created and linked", with the name editable in place. A
+ * rename keeps the anime ({ animeId, newName }); a refusal shows under the field.
+ */
+function NewLinkedShowName({ name, onRename }: { name: string; onRename: (newName: string) => Promise<string | null> }) {
+    const [editing, setEditing] = useState(false);
+    const [value, setValue] = useState(name);
+    const [error, setError] = useState<string | null>(null);
+    const inputId = useId();
+
+    async function submit(event: FormEvent) {
+        event.preventDefault();
+        const next = value.trim();
+
+        if (next === '') {
+            return;
+        }
+
+        if (next === name) {
+            setEditing(false);
+            return;
+        }
+
+        setError(null);
+        const failure = await onRename(next);
+
+        // On success this component is replaced (its key carries the name), so only a refusal lands here.
+        if (failure !== null) {
+            setError(failure);
+        }
+    }
+
+    if (!editing) {
+        return (
+            <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
+                <span className="flex min-w-0 items-start gap-1.5">
+                    <Link2 className="mt-px size-3.5 shrink-0" aria-hidden />
+                    <span className="min-w-0 break-words">
+                        New show <span className="font-medium text-foreground">{name}</span> will be created and linked
+                    </span>
+                </span>
+                <button
+                    type="button"
+                    className={cn(
+                        'inline-flex items-center gap-1 rounded-sm text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline',
+                        TOUCH_TARGET_SM,
+                    )}
+                    onClick={() => {
+                        setValue(name);
+                        setError(null);
+                        setEditing(true);
+                    }}
+                >
+                    <Pencil className="size-3" aria-hidden />
+                    rename
+                </button>
+            </p>
+        );
+    }
+
+    return (
+        <form onSubmit={submit} className="flex flex-col gap-1.5">
+            <label htmlFor={inputId} className="text-xs font-medium text-muted-foreground">
+                Name of the new show
+            </label>
+            <div className="flex flex-col gap-2 sm:flex-row">
+                <Input
+                    id={inputId}
+                    value={value}
+                    onChange={(event) => setValue(event.target.value)}
+                    maxLength={255}
+                    autoFocus
+                    autoComplete="off"
+                    aria-invalid={error !== null}
+                    aria-describedby={error ? `${inputId}-error` : undefined}
+                    className="sm:max-w-sm"
+                />
+                <div className="flex gap-2">
+                    <Button type="submit" className="flex-1 sm:flex-none" disabled={value.trim() === ''}>
+                        Save
+                    </Button>
+                    <Button type="button" variant="ghost" onClick={() => setEditing(false)}>
+                        Cancel
+                    </Button>
+                </div>
+            </div>
+            {error && (
+                <p id={`${inputId}-error`} role="alert" className="text-xs text-destructive">
+                    {error}
+                </p>
+            )}
+        </form>
     );
 }
 
@@ -687,47 +888,104 @@ type SearchState =
     | { status: 'idle' }
     | { status: 'loading' }
     | { status: 'error'; message: string }
-    | { status: 'loaded'; shows: NyaaShowSearch['shows'] };
+    | { status: 'loaded'; query: string; shows: NyaaShowSearch['shows']; anime: NyaaAnimeHit[] };
+
+/** The online search for the current query: running, or done (`error` is the backend's neutral text). */
+type OnlineState = { status: 'idle' } | { status: 'searching' } | { status: 'done'; added: number; error: string | null };
 
 const SEARCH_DEBOUNCE_MS = 250;
+/** The online search waits for a longer pause in typing. */
+const ONLINE_DELAY_MS = 800;
+/** Fewer local anime than this (for a query of at least ONLINE_MIN_LENGTH) asks online too. */
+const ONLINE_BELOW = 3;
+const ONLINE_MIN_LENGTH = 3;
+
+function queryKey(q: string): string {
+    return q.trim().toLowerCase().replace(/\s+/g, ' ');
+}
 
 const OPTION =
-    'flex w-full flex-col items-start gap-0.5 rounded-md px-2.5 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none disabled:cursor-default disabled:hover:bg-transparent [@media(hover:none)]:min-h-11 [@media(hover:none)]:justify-center';
+    'flex w-full rounded-md px-2.5 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none disabled:cursor-default disabled:hover:bg-transparent [@media(hover:none)]:min-h-11';
+/** A text-only option: name over a muted line. */
+const TEXT_OPTION = cn(OPTION, 'flex-col items-start justify-center gap-0.5');
+/** An option with a cover on the left. */
+const COVER_OPTION = cn(OPTION, 'items-start gap-2.5');
 
-/** Candidates first, then a search over every show, then "Create a new show…". Inline, so it scrolls with the list. */
-function TargetPanel({ id, series, onChoose }: { id: string; series: NyaaSeries; onChoose: (target: TargetChoice) => void }) {
+function CurrentMark() {
+    return <Check className="size-4 shrink-0 text-primary" aria-label="current" />;
+}
+
+/**
+ * Suggestions first, then a search over anime and shows (anime first; online too
+ * when the catalog has little), then "Create a new show…". Inline, so it scrolls
+ * with the list.
+ */
+function TargetPanel({
+    id,
+    series,
+    error,
+    onChoose,
+}: {
+    id: string;
+    series: NyaaSeries;
+    error: string | null;
+    onChoose: (target: TargetChoice) => void;
+}) {
     const { target, candidates } = series;
+    const onlineSearched = useContext(OnlineSearchedContext);
     const [query, setQuery] = useState('');
     const [search, setSearch] = useState<SearchState>({ status: 'idle' });
+    const [online, setOnline] = useState<OnlineState>({ status: 'idle' });
+    const [expanded, setExpanded] = useState<number | null>(null);
     const [creating, setCreating] = useState(false);
     const [newName, setNewName] = useState(series.suggestedName);
-    const controllerRef = useRef<AbortController | null>(null);
-    const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-    const currentId = target.kind === 'existing' ? target.showId : null;
+    const errorRef = useRef<HTMLParagraphElement>(null);
+    const timers = useRef<{ local?: ReturnType<typeof setTimeout>; online?: ReturnType<typeof setTimeout> }>({});
+    const controllers = useRef<{ local?: AbortController; online?: AbortController }>({});
+    /** The latest query (trimmed), when it was typed, and the anime its local search found. */
+    const latest = useRef<{ q: string; typedAt: number; localAnime: NyaaAnimeHit[] | null }>({ q: '', typedAt: 0, localAnime: null });
+    const currentShowId = target.kind === 'existing' ? target.showId : null;
+    const currentAnimeId = target.anime?.id ?? null;
 
     useEffect(
         () => () => {
-            controllerRef.current?.abort();
-            clearTimeout(debounceRef.current);
+            controllers.current.local?.abort();
+            controllers.current.online?.abort();
+            clearTimeout(timers.current.local);
+            clearTimeout(timers.current.online);
         },
         [],
     );
 
-    function runSearch(q: string) {
-        // A newer search always wins: the previous request is aborted.
-        controllerRef.current?.abort();
+    useEffect(() => {
+        if (error !== null) {
+            errorRef.current?.scrollIntoView({ block: 'nearest' });
+        }
+    }, [error]);
 
-        if (q.trim() === '') {
+    function runLocal(q: string) {
+        // A newer search always wins: the previous request is aborted.
+        controllers.current.local?.abort();
+
+        if (q === '') {
             setSearch({ status: 'idle' });
             return;
         }
 
         const controller = new AbortController();
-        controllerRef.current = controller;
+        controllers.current.local = controller;
         setSearch({ status: 'loading' });
 
-        getJson<NyaaShowSearch>(`/import/nyaa/shows?q=${encodeURIComponent(q.trim())}`, controller.signal)
-            .then((result) => setSearch({ status: 'loaded', shows: result.shows }))
+        getJson<NyaaShowSearch>(`/import/nyaa/shows?q=${encodeURIComponent(q)}`, controller.signal)
+            .then((result) => {
+                if (q !== latest.current.q) {
+                    return;
+                }
+
+                latest.current.localAnime = result.anime;
+                setSearch({ status: 'loaded', query: q, shows: result.shows, anime: result.anime });
+                maybeSearchOnline(q);
+            })
             .catch((caught: unknown) => {
                 if (!controller.signal.aborted) {
                     setSearch({ status: 'error', message: caught instanceof HttpError ? caught.message : 'The search failed.' });
@@ -735,10 +993,79 @@ function TargetPanel({ id, series, onChoose }: { id: string; series: NyaaSeries;
             });
     }
 
+    /**
+     * Called when typing has paused long enough and when the local results arrive;
+     * runs once both are true, the local search found few anime, and this query
+     * hasn't been searched online in this dialog yet.
+     */
+    function maybeSearchOnline(q: string) {
+        const { q: current, typedAt, localAnime } = latest.current;
+
+        if (q !== current || localAnime === null || Date.now() - typedAt < ONLINE_DELAY_MS - 20) {
+            return;
+        }
+
+        const key = queryKey(q);
+
+        if (q.length < ONLINE_MIN_LENGTH || localAnime.length >= ONLINE_BELOW || onlineSearched.has(key)) {
+            return;
+        }
+
+        onlineSearched.add(key);
+        const controller = new AbortController();
+        controllers.current.online = controller;
+        setOnline({ status: 'searching' });
+
+        getJson<NyaaShowSearch>(`/import/nyaa/shows?q=${encodeURIComponent(q)}&provider=1`, controller.signal)
+            .then((result) => {
+                if (q !== latest.current.q) {
+                    return;
+                }
+
+                // Over the limit nothing was searched: a later pause may try again.
+                if (!result.providerSearched) {
+                    onlineSearched.delete(key);
+                }
+
+                const before = latest.current.localAnime ?? [];
+                const known = new Set(before.map((anime) => anime.id));
+                const ids = new Set(result.anime.map((anime) => anime.id));
+
+                // The response ranks local and online hits together; a local one it dropped stays at the end.
+                setSearch({
+                    status: 'loaded',
+                    query: q,
+                    shows: result.shows,
+                    anime: [...result.anime, ...before.filter((anime) => !ids.has(anime.id))],
+                });
+                setOnline({ status: 'done', added: result.anime.filter((anime) => !known.has(anime.id)).length, error: result.providerError });
+            })
+            .catch(() => {
+                if (!controller.signal.aborted) {
+                    onlineSearched.delete(key);
+                    setOnline({ status: 'done', added: 0, error: 'Online search failed, try again later.' });
+                }
+            });
+    }
+
     function handleQuery(value: string) {
+        const q = value.trim();
         setQuery(value);
-        clearTimeout(debounceRef.current);
-        debounceRef.current = setTimeout(() => runSearch(value), SEARCH_DEBOUNCE_MS);
+
+        // Only whitespace changed: the search for this query goes on.
+        if (q === latest.current.q) {
+            return;
+        }
+
+        setExpanded(null);
+        clearTimeout(timers.current.local);
+        clearTimeout(timers.current.online);
+        // An online search for an older query is stale.
+        controllers.current.online?.abort();
+        setOnline({ status: 'idle' });
+        latest.current = { q, typedAt: Date.now(), localAnime: null };
+        timers.current.local = setTimeout(() => runLocal(q), SEARCH_DEBOUNCE_MS);
+        timers.current.online = setTimeout(() => maybeSearchOnline(q), ONLINE_DELAY_MS);
     }
 
     function submitNew(event: FormEvent) {
@@ -750,34 +1077,59 @@ function TargetPanel({ id, series, onChoose }: { id: string; series: NyaaSeries;
         }
     }
 
+    /** An anime with one show or none goes by id; with several, its shows are listed to pick from. */
+    function chooseAnime(anime: NyaaAnimeHit) {
+        if (anime.linkedShows.length > 1) {
+            setExpanded((value) => (value === anime.id ? null : anime.id));
+        } else {
+            onChoose({ animeId: anime.id });
+        }
+    }
+
+    const loaded = search.status === 'loaded' && search.query === query.trim() ? search : null;
+
     return (
         <div id={id} className="flex flex-col gap-3 rounded-md border bg-background p-2.5 shadow-xs">
+            {error && (
+                <p ref={errorRef} role="alert" className="px-2.5 text-xs text-destructive">
+                    {error}
+                </p>
+            )}
+
             {candidates.length > 0 && (
-                <div className="flex flex-col gap-0.5">
-                    <p className="px-2.5 text-xs font-medium text-muted-foreground">Suggested</p>
-                    <ul className="flex flex-col">
-                        {candidates.map((candidate) => (
-                            <li key={candidate.showId}>
-                                <button
-                                    type="button"
-                                    className={OPTION}
-                                    disabled={candidate.showId === currentId}
-                                    aria-current={candidate.showId === currentId ? 'true' : undefined}
-                                    onClick={() => onChoose({ showId: candidate.showId })}
-                                >
-                                    <span className="flex w-full items-center gap-1.5 font-medium">
-                                        <span className="min-w-0 break-words">{candidate.showName}</span>
-                                        {candidate.showId === currentId && <Check className="size-4 shrink-0 text-primary" aria-label="current" />}
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">
-                                        {candidate.why}
-                                        {!candidate.trackable && ' · not trackable'}
-                                    </span>
-                                </button>
+                <OptionGroup label="Suggested">
+                    {candidates.map((candidate) =>
+                        candidate.kind === 'anime' ? (
+                            <li key={`anime:${candidate.anime.id}`}>
+                                <AnimeOption
+                                    anime={candidate.anime}
+                                    current={target.kind === 'new' && candidate.anime.id === currentAnimeId}
+                                    detail={
+                                        <>
+                                            {candidate.why}
+                                            {!candidate.trackable && ' · not trackable'}
+                                        </>
+                                    }
+                                    onClick={() => onChoose({ animeId: candidate.anime.id })}
+                                />
                             </li>
-                        ))}
-                    </ul>
-                </div>
+                        ) : (
+                            <li key={`show:${candidate.showId}`}>
+                                <ShowOption
+                                    name={candidate.showName}
+                                    current={candidate.showId === currentShowId}
+                                    detail={
+                                        <>
+                                            {candidate.why}
+                                            {!candidate.trackable && ' · not trackable'}
+                                        </>
+                                    }
+                                    onClick={() => onChoose({ showId: candidate.showId })}
+                                />
+                            </li>
+                        ),
+                    )}
+                </OptionGroup>
             )}
 
             <div className="flex flex-col gap-1">
@@ -786,8 +1138,8 @@ function TargetPanel({ id, series, onChoose }: { id: string; series: NyaaSeries;
                     <Input
                         value={query}
                         onChange={(event) => handleQuery(event.target.value)}
-                        placeholder="Search your shows…"
-                        aria-label="Search your shows"
+                        placeholder="Search anime and shows…"
+                        aria-label="Search anime and shows"
                         className="px-9"
                         autoFocus={candidates.length === 0}
                     />
@@ -796,37 +1148,74 @@ function TargetPanel({ id, series, onChoose }: { id: string; series: NyaaSeries;
                     )}
                 </div>
                 {search.status === 'error' && <p className="px-2.5 text-xs text-destructive">{search.message}</p>}
-                {search.status === 'loaded' &&
-                    (search.shows.length === 0 ? (
-                        <p className="px-2.5 py-1 text-xs text-muted-foreground">No show matches "{query.trim()}".</p>
+                <OnlineLine state={online} />
+                {loaded &&
+                    (loaded.anime.length === 0 && loaded.shows.length === 0 ? (
+                        online.status !== 'searching' && (
+                            <p className="px-2.5 py-1 text-xs text-muted-foreground">No anime or show matches "{loaded.query}".</p>
+                        )
                     ) : (
-                        <ul className="flex max-h-64 flex-col overflow-y-auto">
-                            {search.shows.map((show) => (
-                                <li key={show.id}>
-                                    <button
-                                        type="button"
-                                        className={OPTION}
-                                        disabled={show.id === currentId}
-                                        aria-current={show.id === currentId ? 'true' : undefined}
-                                        onClick={() => onChoose({ showId: show.id })}
-                                    >
-                                        <span className="flex w-full items-center gap-1.5">
-                                            <span className="min-w-0 break-words">{show.name}</span>
-                                            {show.id === currentId && <Check className="size-4 shrink-0 text-primary" aria-label="current" />}
-                                        </span>
-                                        <span className="text-xs text-muted-foreground">
-                                            {[
-                                                show.latestEpisode !== null && `latest ep ${show.latestEpisode}`,
-                                                show.isTracked && 'tracked',
-                                                !show.trackable && 'not trackable',
-                                            ]
-                                                .filter(Boolean)
-                                                .join(' · ') || 'no episodes yet'}
-                                        </span>
-                                    </button>
-                                </li>
-                            ))}
-                        </ul>
+                        <div className="flex max-h-[min(24rem,60dvh)] flex-col gap-2 overflow-y-auto">
+                            {loaded.anime.length > 0 && (
+                                <OptionGroup label="Anime">
+                                    {loaded.anime.map((anime) => {
+                                        const several = anime.linkedShows.length > 1;
+                                        const open = expanded === anime.id;
+
+                                        return (
+                                            <li key={anime.id}>
+                                                <AnimeOption
+                                                    anime={anime}
+                                                    current={
+                                                        !several &&
+                                                        (anime.id === currentAnimeId ||
+                                                            (anime.linkedShows.length === 1 && anime.linkedShows[0].id === currentShowId))
+                                                    }
+                                                    detail={linkedShowsText(anime)}
+                                                    expanded={several ? open : undefined}
+                                                    onClick={() => chooseAnime(anime)}
+                                                />
+                                                {several && open && (
+                                                    <ul className="ml-[3.25rem] flex flex-col border-l pl-1" aria-label={`Shows of ${anime.title}`}>
+                                                        {anime.linkedShows.map((show) => (
+                                                            <li key={show.id}>
+                                                                <ShowOption
+                                                                    name={show.name}
+                                                                    current={show.id === currentShowId}
+                                                                    onClick={() => onChoose({ showId: show.id })}
+                                                                />
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                )}
+                                            </li>
+                                        );
+                                    })}
+                                </OptionGroup>
+                            )}
+                            {loaded.shows.length > 0 && (
+                                <OptionGroup label="Shows">
+                                    {loaded.shows.map((show) => (
+                                        <li key={show.id}>
+                                            <ShowOption
+                                                name={show.name}
+                                                current={show.id === currentShowId}
+                                                detail={
+                                                    [
+                                                        show.latestEpisode !== null && `latest ep ${show.latestEpisode}`,
+                                                        show.isTracked && 'tracked',
+                                                        !show.trackable && 'not trackable',
+                                                    ]
+                                                        .filter(Boolean)
+                                                        .join(' · ') || 'no episodes yet'
+                                                }
+                                                onClick={() => onChoose({ showId: show.id })}
+                                            />
+                                        </li>
+                                    ))}
+                                </OptionGroup>
+                            )}
+                        </div>
                     ))}
             </div>
 
@@ -854,22 +1243,127 @@ function TargetPanel({ id, series, onChoose }: { id: string; series: NyaaSeries;
                         </div>
                     </div>
                     <p className="px-0.5 text-xs text-muted-foreground">
-                        Created untracked when you add the releases. A show with exactly this name is used instead.
+                        Created untracked when you add the releases, not linked to an anime. A show with exactly this name is used instead.
                     </p>
                 </form>
             ) : (
                 <div className="border-t pt-2">
-                    <button
-                        type="button"
-                        className={cn(OPTION, 'flex-row items-center gap-1.5 [@media(hover:none)]:justify-start')}
-                        onClick={() => setCreating(true)}
-                    >
+                    <button type="button" className={cn(OPTION, 'items-center gap-1.5')} onClick={() => setCreating(true)}>
                         <Plus className="size-4 shrink-0" aria-hidden />
                         Create a new show…
                     </button>
                 </div>
             )}
         </div>
+    );
+}
+
+function linkedShowsText(anime: NyaaAnimeHit): ReactNode {
+    const shows = anime.linkedShows;
+
+    if (shows.length === 0) {
+        return 'no show yet';
+    }
+
+    if (shows.length === 1) {
+        return (
+            <>
+                has show <span className="text-foreground">{shows[0].name}</span>
+            </>
+        );
+    }
+
+    return `has ${shows.length} shows: pick one`;
+}
+
+/** "Searching online…", then what it added, or its neutral error. Never an error toast. */
+function OnlineLine({ state }: { state: OnlineState }) {
+    if (state.status === 'idle') {
+        return null;
+    }
+
+    return (
+        <p className="flex items-center gap-1.5 px-2.5 text-xs text-muted-foreground" aria-live="polite">
+            {state.status === 'searching' ? (
+                <>
+                    <Loader2 className="size-3 shrink-0 animate-spin" aria-hidden />
+                    Searching online…
+                </>
+            ) : (
+                (state.error ?? (state.added > 0 ? `Found ${plural(state.added, 'more anime', 'more anime')} online.` : 'Nothing more found online.'))
+            )}
+        </p>
+    );
+}
+
+function OptionGroup({ label, children }: { label: string; children: ReactNode }) {
+    const labelId = useId();
+
+    return (
+        <div className="flex flex-col gap-0.5">
+            <p id={labelId} className="px-2.5 text-xs font-medium text-muted-foreground">
+                {label}
+            </p>
+            <ul aria-labelledby={labelId} className="flex flex-col">
+                {children}
+            </ul>
+        </div>
+    );
+}
+
+function ShowOption({ name, current, detail, onClick }: { name: string; current: boolean; detail?: ReactNode; onClick: () => void }) {
+    return (
+        <button type="button" className={TEXT_OPTION} disabled={current} aria-current={current ? 'true' : undefined} onClick={onClick}>
+            <span className="flex w-full items-center gap-1.5">
+                <span className="min-w-0 break-words">{name}</span>
+                {current && <CurrentMark />}
+            </span>
+            {detail && <span className="text-xs text-muted-foreground">{detail}</span>}
+        </button>
+    );
+}
+
+/** An anime: cover, title, season and format, and a line about it (`why`, or its shows). `expanded` set: it opens a list. */
+function AnimeOption({
+    anime,
+    current,
+    detail,
+    expanded,
+    onClick,
+}: {
+    anime: NyaaAnimeRef;
+    current: boolean;
+    detail: ReactNode;
+    expanded?: boolean;
+    onClick: () => void;
+}) {
+    const facts = animeFacts(anime);
+
+    return (
+        <button
+            type="button"
+            className={COVER_OPTION}
+            disabled={current}
+            aria-current={current ? 'true' : undefined}
+            aria-expanded={expanded}
+            onClick={onClick}
+        >
+            <AnimeThumb anime={anime} />
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="flex w-full items-center gap-1.5 font-medium">
+                    <span className="min-w-0 break-words">{anime.title}</span>
+                    {current && <CurrentMark />}
+                </span>
+                {facts && <span className="text-xs text-muted-foreground">{facts}</span>}
+                <span className="text-xs text-muted-foreground">{detail}</span>
+            </span>
+            {expanded !== undefined && (
+                <ChevronDown
+                    className={cn('mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform', expanded && 'rotate-180')}
+                    aria-hidden
+                />
+            )}
+        </button>
     );
 }
 
@@ -1017,7 +1511,7 @@ function UnparsedSection({ items }: { items: NyaaPreviewItem[] }) {
 /* ------------------------------------------------------------------- result */
 
 function ImportResult({ result, onAgain, onClose }: { result: NyaaConfirmResult; onAgain: () => void; onClose: () => void }) {
-    const { queued, skipped, errors, shows } = result;
+    const { queued, skipped, errors, shows, warnings } = result;
 
     return (
         <div className="flex min-h-0 flex-1 flex-col">
@@ -1038,16 +1532,30 @@ function ImportResult({ result, onAgain, onClose }: { result: NyaaConfirmResult;
                     <ul className="flex flex-col gap-1 text-sm">
                         {shows.map((show) => (
                             <li key={show.id}>
+                                {/* A linked show opens its anime's page, where the show and its episodes are too. */}
                                 <Link
-                                    href={`/shows/${show.id}`}
+                                    href={show.linkedAnime ? `/anime/${show.linkedAnime.id}` : `/shows/${show.id}`}
                                     className="inline-flex items-center gap-1 font-medium hover:underline"
                                     onClick={onClose}
                                 >
                                     {show.name}
                                     <ArrowRight className="size-3.5" aria-hidden />
                                 </Link>
-                                {show.created && <span className="text-muted-foreground"> · new show, not tracked</span>}
+                                {(show.created || show.linkedAnime) && (
+                                    <span className="text-muted-foreground">
+                                        {show.created && ' · new show, not tracked'}
+                                        {show.linkedAnime && ` · linked to ${show.linkedAnime.title}`}
+                                    </span>
+                                )}
                             </li>
+                        ))}
+                    </ul>
+                )}
+
+                {warnings.length > 0 && (
+                    <ul className="flex list-disc flex-col gap-0.5 pl-5 text-xs text-muted-foreground" aria-label="Notes">
+                        {warnings.map((warning) => (
+                            <li key={warning}>{warning}</li>
                         ))}
                     </ul>
                 )}

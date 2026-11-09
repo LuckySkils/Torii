@@ -100,15 +100,15 @@ final class NyaaImportPreviews
     }
 
     /**
-     * Points one series at another show (an existing one, or a new name) and
-     * recomputes the states. A new name that some show has exactly becomes that
-     * show.
+     * Points one series at another show (an existing one, a new name, or an
+     * anime: its linked show or a new show linked to it) and recomputes the
+     * states. A new name that some show has exactly becomes that show.
      *
      * @return array<string, mixed> the updated stored preview
      *
-     * @throws ValidationException for an unknown preview, series or show, or a bad name
+     * @throws ValidationException for an unknown preview, series, show or anime, or a bad name
      */
-    public function retarget(string $previewId, string $seriesKey, ?int $showId, ?string $newName): array
+    public function retarget(string $previewId, string $seriesKey, ?int $showId, ?string $newName, ?int $animeId = null): array
     {
         $preview = $this->find($previewId);
 
@@ -122,7 +122,19 @@ final class NyaaImportPreviews
             throw ValidationException::withMessages(['seriesKey' => "This preview has no series \"{$seriesKey}\"."]);
         }
 
-        $preview['series'][$index]['target'] = $this->targets->chosen($showId, $newName, $preview['series'][$index]['groups']);
+        $series = $preview['series'][$index];
+
+        // An anime another series already goes to: the same show by default, not a second one.
+        if ($animeId !== null && $newName === null) {
+            foreach ($preview['series'] as $other) {
+                if ($other['key'] !== $seriesKey && ($other['target']['anime']['id'] ?? null) === $animeId) {
+                    $newName = $other['target']['kind'] === 'new' ? $other['target']['name'] : $other['target']['showName'];
+                    break;
+                }
+            }
+        }
+
+        $preview['series'][$index]['target'] = $this->targets->chosen($showId, $newName, $series['groups'], $animeId, $series['suggestedName']);
         $preview = $this->withStates($preview);
 
         $expiresAt = CarbonImmutable::parse($preview['expiresAt']);
@@ -148,6 +160,20 @@ final class NyaaImportPreviews
     public function forget(string $previewId): void
     {
         Cache::forget(self::CACHE_PREFIX.$previewId);
+    }
+
+    /**
+     * Which show a target resolves to, for grouping: an existing show by id, a
+     * new one by its name (trimmed, case-insensitive). Series with the same key
+     * end up in one show on confirm.
+     *
+     * @param  array<string, mixed>  $target
+     */
+    public static function targetKey(array $target): string
+    {
+        return $target['kind'] === 'existing'
+            ? 'id:'.$target['showId']
+            : 'name:'.mb_strtolower(trim((string) $target['name']));
     }
 
     public static function expiredMessage(): string
@@ -266,6 +292,18 @@ final class NyaaImportPreviews
         }
 
         uasort($series, fn (array $a, array $b) => [$a['suggestedName'], $a['key']] <=> [$b['suggestedName'], $b['key']]);
+
+        // Series whose new show would link to the same anime (Erai-raws' "Demons Crest" and ToonsHub's
+        // "Devils Crest" are both the anime "Demons' Crest") share the first one's name: one show, not two.
+        $nameForAnime = [];
+        foreach ($series as $key => $entry) {
+            $animeId = $entry['target']['kind'] === 'new' ? ($entry['target']['animeId'] ?? null) : null;
+
+            if ($animeId !== null) {
+                $nameForAnime[$animeId] ??= $entry['target']['name'];
+                $series[$key]['target']['name'] = $nameForAnime[$animeId];
+            }
+        }
 
         return $series;
     }
@@ -386,13 +424,14 @@ final class NyaaImportPreviews
             };
         }
 
-        // Several copies of one episode and resolution in a series (other groups, or one group's
-        // HEVC and AVC encodes): preselect exactly one, deterministically (not a remake, SubsPlease,
+        // Several copies of one episode and resolution going to one show (other groups, possibly in
+        // other series pointed at the same show, or one group's HEVC and AVC encodes): preselect
+        // exactly one, deterministically (not a remake, SubsPlease,
         // trusted, most seeders, then first in the feed). Which one doesn't matter much: the user decides.
         $buckets = [];
         foreach ($items as $key => $item) {
             if ($states[$key] === null && ! $item['isBatch'] && $item['episode'] !== null) {
-                $buckets[$item['seriesKey'].'|'.$episodeOf($item).'|'.$item['resolution']][] = $item;
+                $buckets[self::targetKey($targets[$item['seriesKey']]).'|'.$episodeOf($item).'|'.$item['resolution']][] = $item;
             }
         }
 

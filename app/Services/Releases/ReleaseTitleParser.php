@@ -24,7 +24,7 @@ final class ReleaseTitleParser
 
     private const EXTENSION = '/\.(?:mkv|mp4|avi|webm|m4v|ts|wmv)$/i';
 
-    private const RESOLUTION = '/(?<![0-9])(480|720|1080|2160)p(?![a-z0-9])/i';
+    private const RESOLUTION = '/(?<![0-9])(480|540|720|1080|2160)p(?![a-z0-9])/i';
 
     private const CRC = '/\[([0-9A-Fa-f]{8})\]/';
 

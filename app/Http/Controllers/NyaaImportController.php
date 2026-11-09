@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Services\Nyaa\NyaaAnimeSearch;
 use App\Services\Nyaa\NyaaException;
 use App\Services\Nyaa\NyaaImporter;
 use App\Services\Nyaa\NyaaImportPreviews;
@@ -43,20 +44,25 @@ class NyaaImportController extends Controller
     }
 
     /**
-     * Points one series of a preview at another show: `target: { showId }` or
-     * `target: { newName }`. Returns the whole updated preview.
+     * Points one series of a preview at another show: `target: { showId }`,
+     * `target: { newName }`, or `target: { animeId, newName? }` (the anime's
+     * linked show, or a new show linked to it). Returns the whole updated preview.
      */
     public function target(Request $request, string $previewId, NyaaImportPreviews $previews): JsonResponse
     {
+        $choose = 'Choose a show or an anime, or give a name for a new show.';
+
         $data = $request->validate([
             'seriesKey' => ['required', 'string', 'max:300'],
             'target' => ['required', 'array'],
-            'target.showId' => ['nullable', 'integer', 'required_without:target.newName', 'prohibits:target.newName'],
-            'target.newName' => ['nullable', 'string', 'max:1000', 'required_without:target.showId'],
+            'target.showId' => ['nullable', 'integer', 'required_without_all:target.newName,target.animeId', 'prohibits:target.newName,target.animeId'],
+            'target.newName' => ['nullable', 'string', 'max:1000', 'required_without_all:target.showId,target.animeId'],
+            'target.animeId' => ['nullable', 'integer', 'required_without_all:target.showId,target.newName'],
         ], [
-            'target.showId.required_without' => 'Choose a show, or give a name for a new one.',
-            'target.newName.required_without' => 'Choose a show, or give a name for a new one.',
-            'target.showId.prohibits' => 'Choose either an existing show or a new name, not both.',
+            'target.showId.required_without_all' => $choose,
+            'target.newName.required_without_all' => $choose,
+            'target.animeId.required_without_all' => $choose,
+            'target.showId.prohibits' => 'Choose either an existing show, or an anime or a new name, not both.',
         ]);
 
         $preview = $previews->retarget(
@@ -64,16 +70,29 @@ class NyaaImportController extends Controller
             $data['seriesKey'],
             isset($data['target']['showId']) ? (int) $data['target']['showId'] : null,
             $data['target']['newName'] ?? null,
+            isset($data['target']['animeId']) ? (int) $data['target']['animeId'] : null,
         );
 
         return response()->json(NyaaImportPreviews::publicView($preview));
     }
 
-    /** The show picker: `GET /import/nyaa/shows?q=`. */
-    public function shows(Request $request, SeriesTargets $targets): JsonResponse
+    /**
+     * The target picker: `GET /import/nyaa/shows?q=&provider=1`. Shows by name,
+     * and anime from the local catalog; `provider=1` also asks the metadata
+     * provider once (limited per client; over the limit, or failing, it says so
+     * in `providerError` and the local results still come back).
+     */
+    public function shows(Request $request, SeriesTargets $targets, NyaaAnimeSearch $anime): JsonResponse
     {
-        $data = $request->validate(['q' => ['nullable', 'string', 'max:200']]);
+        $data = $request->validate([
+            'q' => ['nullable', 'string', 'max:200'],
+            'provider' => ['nullable', 'boolean'],
+        ]);
+        $q = (string) ($data['q'] ?? '');
 
-        return response()->json(['shows' => $targets->search((string) ($data['q'] ?? ''))]);
+        return response()->json([
+            'shows' => $targets->search($q),
+            ...$anime->search($q, (bool) ($data['provider'] ?? false), (string) $request->ip()),
+        ]);
     }
 }

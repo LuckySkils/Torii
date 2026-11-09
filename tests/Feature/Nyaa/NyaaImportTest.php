@@ -157,7 +157,7 @@ test('preview: each state with its default selection and reason', function () {
         ->and($summary('5'))->toBe(['new', false, 'Marked as a remake on Nyaa.'])
         ->and($summary('6'))->toBe(['unparsed', false, "Torii couldn't read a show and episode from this title."])
         ->and($preview['series'])->toHaveCount(1)
-        ->and($preview['series'][0]['target'])->toBe(['kind' => 'new', 'name' => HANAORI, 'trackable' => true, 'trackBlockedReason' => null])
+        ->and($preview['series'][0]['target'])->toBe(['kind' => 'new', 'name' => HANAORI, 'trackable' => true, 'trackBlockedReason' => null, 'anime' => null])
         ->and($preview['truncated'])->toBeFalse()
         ->and($preview['feedTitle'])->toContain('Torrent File RSS')
         ->and($preview['previewId'])->toBeString()
@@ -219,14 +219,14 @@ test('preview: an existing show with the exact name is the target, several shows
         'http://qbit.test:8080/api/v2/torrents/info*' => Http::response([]),
     ]);
 
-    expect(nyaaPreview()['series'][0]['target'])->toBe(['kind' => 'existing', 'showId' => $show->id, 'showName' => HANAORI, 'trackable' => false, 'trackBlockedReason' => "No SubsPlease releases: Torii's download rule only follows SubsPlease's feed."]);
+    expect(nyaaPreview()['series'][0]['target'])->toBe(['kind' => 'existing', 'showId' => $show->id, 'showName' => HANAORI, 'trackable' => false, 'trackBlockedReason' => "No SubsPlease releases: Torii's download rule only follows SubsPlease's feed.", 'anime' => null]);
 
     $preview = nyaaPreview();
 
     expect(array_column($preview['series'], 'suggestedName'))->toBe([HANAORI, 'Other Show'])
         ->and(array_column($preview['series'], 'target'))->toBe([
-            ['kind' => 'existing', 'showId' => $show->id, 'showName' => HANAORI, 'trackable' => false, 'trackBlockedReason' => "No SubsPlease releases: Torii's download rule only follows SubsPlease's feed."],
-            ['kind' => 'new', 'name' => 'Other Show', 'trackable' => true, 'trackBlockedReason' => null],
+            ['kind' => 'existing', 'showId' => $show->id, 'showName' => HANAORI, 'trackable' => false, 'trackBlockedReason' => "No SubsPlease releases: Torii's download rule only follows SubsPlease's feed.", 'anime' => null],
+            ['kind' => 'new', 'name' => 'Other Show', 'trackable' => true, 'trackBlockedReason' => null, 'anime' => null],
         ])
         ->and($preview['warnings'])->toBe([]);
 });
@@ -248,7 +248,7 @@ test('confirm creates the show untracked, stores nyaa releases with magnets and 
     $releases = Release::where('show_id', $show->id)->orderBy('episode')->get();
 
     expect($result)->toMatchArray(['queued' => 2, 'skipped' => [], 'errors' => []])
-        ->and($result['shows'])->toBe([['id' => $show->id, 'name' => HANAORI, 'created' => true]])
+        ->and($result['shows'])->toBe([['id' => $show->id, 'name' => HANAORI, 'created' => true, 'linkedAnime' => null]])
         ->and($show->is_tracked)->toBeFalse()
         ->and($show->rule_state->value)->toBe('none')
         ->and($show->latest_episode)->toBe('02')
@@ -275,7 +275,7 @@ test('confirm attaches to the existing show with that exact name, untouched', fu
 
     $result = $this->postJson('/import/nyaa/confirm', ['previewId' => nyaaPreview()['previewId'], 'keys' => ['1']])->assertOk()->json();
 
-    expect($result['shows'])->toBe([['id' => $show->id, 'name' => HANAORI, 'created' => false]])
+    expect($result['shows'])->toBe([['id' => $show->id, 'name' => HANAORI, 'created' => false, 'linkedAnime' => null]])
         ->and(Show::count())->toBe(1)
         ->and($show->fresh()->latest_episode)->toBe('09')
         ->and($show->fresh()->is_tracked)->toBeFalse()
@@ -404,7 +404,7 @@ test('the real feed previews as 12 new, selected episodes of one new show; episo
         ->and($preview['series'])->toHaveCount(1)
         ->and($preview['series'][0])->toMatchArray([
             'parsedName' => HANAORI, 'season' => null, 'suggestedName' => HANAORI, 'groups' => ['SubsPlease'],
-            'target' => ['kind' => 'new', 'name' => HANAORI, 'trackable' => true, 'trackBlockedReason' => null], 'candidates' => [],
+            'target' => ['kind' => 'new', 'name' => HANAORI, 'trackable' => true, 'trackBlockedReason' => null, 'anime' => null], 'candidates' => [],
         ])
         ->and($preview['series'][0]['itemKeys'])->toHaveCount(12)
         ->and($preview['truncated'])->toBeFalse()

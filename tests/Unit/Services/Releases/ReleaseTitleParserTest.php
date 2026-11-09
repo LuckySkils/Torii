@@ -190,6 +190,16 @@ test('real title (Erai-raws, live nyaa.si 2026-11-08): the HEVC and AVC copies o
         ->and([$hevc->crc, $avc->crc])->toBe(['1211C3AE', '465C6C16']);
 });
 
+test('real title (Erai-raws, live nyaa.si 2026-11-09): 540p is a resolution, alongside 720p and 1080p of the same episode', function () {
+    $sd = $this->parser->parse('[Erai-raws] Demons Crest - 01 [540p AMZN WEB-DL AVC EAC3][MultiSub][97E6E5CC]');
+    $hd = $this->parser->parse('[Erai-raws] Demons Crest - 01 [720p AMZN WEB-DL AVC EAC3][MultiSub][FBCB569D]');
+    $fhd = $this->parser->parse('[Erai-raws] Demons Crest - 01 [1080p AMZN WEB-DL AVC EAC3][MultiSub][AF4DCB26]');
+
+    expect([$sd->group, $sd->name, $sd->episode, $sd->resolution, $sd->crc])->toBe(['Erai-raws', 'Demons Crest', '01', '540p', '97E6E5CC'])
+        ->and([$hd->resolution, $fhd->resolution])->toBe(['720p', '1080p'])
+        ->and($this->parser->parse('[Erai-raws] Demons Crest - 02 [540p AMZN WEB-DL AVC EAC3][MultiSub][AD1CE13A]')->resolution)->toBe('540p');
+});
+
 test('constructed: a season pack suggests the later-season show name', function () {
     expect($this->parser->parse('[Judas] Black Clover S02 [1080p]')->suggestedShowName())->toBe('Black Clover S2')
         ->and($this->parser->parse('[ToonsHub] TANK CHAIR S01E01-E12 1080p')->suggestedShowName())->toBe('TANK CHAIR');

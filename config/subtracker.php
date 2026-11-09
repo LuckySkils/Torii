@@ -97,6 +97,9 @@ return [
         'previews_per_minute' => 10,
         // Retargeting a series only recomputes the cached preview (no external calls).
         'retargets_per_minute' => 60,
+        // The target picker's online search (GET /import/nyaa/shows?provider=1): one provider request each.
+        // Over the limit the local results still come back, with "Online search is busy" (no 429).
+        'provider_searches_per_minute' => 10,
     ],
 
     // MCP server (§15). Off by default; with MCP_PORT set it gets its own listener.

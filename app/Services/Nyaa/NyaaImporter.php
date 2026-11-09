@@ -8,9 +8,13 @@ use App\Enums\DispatchStatus;
 use App\Enums\PremiereSource;
 use App\Enums\ReleaseSource;
 use App\Events\ShowDiscovered;
+use App\Jobs\FetchAnimeCover;
 use App\Jobs\QueueReleases;
+use App\Models\Anime;
 use App\Models\Release;
 use App\Models\Show;
+use App\Models\ShowAnimeLink;
+use App\Services\Metadata\Matching\ShowAnimeLinker;
 use App\Services\Premiere\PremiereCalculator;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -29,17 +33,24 @@ use Throwable;
  * error handling apply. Never creates a rule, never tracks a show, and doesn't
  * fire NewReleaseDetected (these aren't new episodes: no notifications, no
  * auto-queueing).
+ *
+ * A target carrying an anime (a new show picked through its anime entry, or an
+ * unlinked show of that name) gets a manual link to it, made with the show, and
+ * its cover queued. A show that has a link by then keeps it; anything unusual
+ * (several series of one show with different anime, an anime that got another
+ * show since the preview) is reported in `warnings` and logged, never an error.
  */
 final class NyaaImporter
 {
     public function __construct(
         private readonly NyaaImportPreviews $previews,
         private readonly PremiereCalculator $premieres,
+        private readonly ShowAnimeLinker $linker,
     ) {}
 
     /**
      * @param  array<int, string>  $keys
-     * @return array{queued: int, skipped: array<int, array{key: string, title: string, reason: string}>, errors: array<int, array{key: string, title: string, message: string}>, shows: array<int, array{id: int, name: string, created: bool}>}
+     * @return array{queued: int, skipped: array<int, array{key: string, title: string, reason: string}>, errors: array<int, array{key: string, title: string, message: string}>, shows: array<int, array{id: int, name: string, created: bool, linkedAnime: array{id: int, title: string}|null}>, warnings: array<int, string>}
      *
      * @throws ValidationException for an expired preview or keys it doesn't hold
      */
@@ -63,7 +74,7 @@ final class NyaaImporter
         // Used once: a second confirm can't add the same items again.
         $this->previews->forget($previewId);
 
-        $releaseIds = $skipped = $errors = [];
+        $releaseIds = $skipped = $errors = $warnings = [];
         $shows = [];
         $targets = array_column($preview['series'], 'target', 'key');
         $held = HeldEpisodes::forShows(array_values(array_filter(array_map(
@@ -84,7 +95,7 @@ final class NyaaImporter
             $target = $targets[$item['seriesKey']] ?? null;
 
             try {
-                $result = $this->release($item, $target, $held, $shows);
+                $result = $this->release($item, $target, $held, $shows, $warnings);
             } catch (Throwable $e) {
                 logger()->error('Nyaa import: could not store an item', ['title' => $item['title'], 'error' => $e->getMessage()]);
                 $errors[] = ['key' => $key, 'title' => $item['title'], 'message' => 'Could not be stored: '.$e->getMessage()];
@@ -100,6 +111,10 @@ final class NyaaImporter
         }
 
         foreach ($shows as $entry) {
+            if ($entry['linked'] !== null) {
+                FetchAnimeCover::dispatchIfMissing($entry['linked']);
+            }
+
             if ($entry['created']) {
                 ShowDiscovered::dispatch($entry['show']);
             }
@@ -117,15 +132,27 @@ final class NyaaImporter
 
         logger()->info('Nyaa import confirmed', ['queued' => count($releaseIds), 'skipped' => count($skipped), 'errors' => count($errors)]);
 
+        $links = ShowAnimeLink::query()
+            ->whereIn('show_id', array_map(fn (array $entry) => $entry['show']->id, array_values($shows)))
+            ->with(['anime' => fn ($q) => $q->select(['id', 'title_romaji', 'title_english'])])
+            ->get(['show_id', 'anime_id'])
+            ->keyBy('show_id');
+
         return [
             'queued' => count($releaseIds),
             'skipped' => $skipped,
             'errors' => $errors,
-            'shows' => array_values(array_map(fn (array $entry) => [
-                'id' => $entry['show']->id,
-                'name' => $entry['show']->name,
-                'created' => $entry['created'],
-            ], $shows)),
+            'shows' => array_values(array_map(function (array $entry) use ($links) {
+                $anime = $links->get($entry['show']->id)?->anime;
+
+                return [
+                    'id' => $entry['show']->id,
+                    'name' => $entry['show']->name,
+                    'created' => $entry['created'],
+                    'linkedAnime' => $anime === null ? null : ['id' => $anime->id, 'title' => SeriesTargets::animeTitle($anime)],
+                ];
+            }, $shows)),
+            'warnings' => array_values(array_unique($warnings)),
         ];
     }
 
@@ -136,9 +163,10 @@ final class NyaaImporter
      *
      * @param  array<string, mixed>  $item
      * @param  array<string, mixed>|null  $target  the item's series target; null for an unparsed item (no show)
-     * @param  array<string, array{show: Show, created: bool}>  $shows  by id or name, filled as shows are found or created
+     * @param  array<string, array{show: Show, created: bool, anime: int|null, linked: int|null}>  $shows  by id or name, filled as shows are found or created
+     * @param  array<int, string>  $warnings
      */
-    private function release(array $item, ?array $target, HeldEpisodes $held, array &$shows): Release|string
+    private function release(array $item, ?array $target, HeldEpisodes $held, array &$shows, array &$warnings): Release|string
     {
         $existing = Release::query()
             ->when($item['infohash'] !== null, fn ($q) => $q->where('infohash', $item['infohash']), fn ($q) => $q->where('guid', $item['viewUrl']))
@@ -161,8 +189,8 @@ final class NyaaImporter
         $entryKey = null;
 
         if ($target !== null) {
-            $entryKey = $target['kind'] === 'existing' ? 'id:'.$target['showId'] : 'name:'.$target['name'];
-            $shows[$entryKey] ??= $target['kind'] === 'existing' ? $this->existingShow((int) $target['showId']) : $this->show((string) $target['name']);
+            $entryKey = NyaaImportPreviews::targetKey($target);
+            $this->resolveShow($entryKey, $target, $shows, $warnings);
             $show = $shows[$entryKey]['show'];
 
             // The preview is a snapshot: the target may have got this episode since (another group's,
@@ -208,6 +236,106 @@ final class NyaaImporter
         }
 
         return $release;
+    }
+
+    /**
+     * Finds or creates the target's show the first time one of its items needs
+     * it, and links it to the target's anime in the same transaction. Several
+     * series can land on one show (new targets merge by name): the first anime
+     * offered is the one linked; a different one later is only reported.
+     *
+     * @param  array<string, mixed>  $target
+     * @param  array<string, array{show: Show, created: bool, anime: int|null, linked: int|null}>  $shows
+     * @param  array<int, string>  $warnings
+     */
+    private function resolveShow(string $entryKey, array $target, array &$shows, array &$warnings): void
+    {
+        /** @var array{id: int, title: string}|null $anime */
+        $anime = $target['anime'] ?? null;
+
+        // Shows linked by this import itself (series the user pointed at one anime under different names) aren't news.
+        $ours = array_map(fn (array $entry) => $entry['show']->id, array_values($shows));
+
+        if (! isset($shows[$entryKey])) {
+            $shows[$entryKey] = DB::transaction(function () use ($target, $anime, $ours, &$warnings): array {
+                $entry = $target['kind'] === 'existing' ? $this->existingShow((int) $target['showId']) : $this->show((string) $target['name']);
+
+                return [
+                    ...$entry,
+                    'anime' => $anime['id'] ?? null,
+                    'linked' => $anime === null ? null : $this->link($entry['show'], $anime, $ours, $warnings),
+                ];
+            });
+
+            return;
+        }
+
+        $entry = &$shows[$entryKey];
+
+        if ($anime === null || $entry['anime'] === $anime['id']) {
+            return;
+        }
+
+        if ($entry['anime'] === null) {
+            $entry['anime'] = $anime['id'];
+            $show = $entry['show'];
+            $entry['linked'] = DB::transaction(function () use ($show, $anime, $ours, &$warnings): ?int {
+                return $this->link($show, $anime, $ours, $warnings);
+            });
+
+            return;
+        }
+
+        $message = "Several series went to \"{$entry['show']->name}\" with different anime: it was linked to the first one only, not to {$anime['title']}.";
+        logger()->warning('Nyaa import: '.$message, ['show_id' => $entry['show']->id, 'linked_anime_id' => $entry['anime'], 'other_anime_id' => $anime['id']]);
+        $warnings[] = $message;
+    }
+
+    /**
+     * Links the show to the anime by hand, unless it has a link by now. Reports
+     * an anime that got another show since the preview: it's linked anyway (a
+     * show may share its anime), but not silently.
+     *
+     * @param  array{id: int, title: string}  $ref
+     * @param  array<int, int>  $ours  shows this import has already found or created
+     * @param  array<int, string>  $warnings
+     * @return int|null the anime id when a link was made
+     */
+    private function link(Show $show, array $ref, array $ours, array &$warnings): ?int
+    {
+        $anime = Anime::find($ref['id']);
+
+        if ($anime === null) {
+            $warnings[] = "\"{$show->name}\" wasn't linked: the anime {$ref['title']} is no longer in Torii.";
+
+            return null;
+        }
+
+        $title = SeriesTargets::animeTitle($anime);
+        $current = ShowAnimeLink::where('show_id', $show->id)->first();
+
+        if ($current !== null) {
+            if ($current->anime_id !== $anime->id) {
+                $warnings[] = "\"{$show->name}\" was already linked to another anime, so it wasn't linked to {$title}.";
+            }
+
+            return null;
+        }
+
+        $others = array_values(array_filter(
+            SeriesTargets::linkedShowsOf([$anime->id])[$anime->id] ?? [],
+            fn (array $other) => ! in_array($other['id'], $ours, true),
+        ));
+
+        $this->linker->linkManually($show, $anime);
+
+        if ($others !== []) {
+            $message = "{$title} got another show since the preview (".implode(', ', array_column($others, 'name'))."): \"{$show->name}\" is linked to it as well.";
+            logger()->warning('Nyaa import: '.$message, ['show_id' => $show->id, 'anime_id' => $anime->id]);
+            $warnings[] = $message;
+        }
+
+        return $anime->id;
     }
 
     /**

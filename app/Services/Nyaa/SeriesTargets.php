@@ -13,6 +13,7 @@ use App\Services\Metadata\Matching\MatchCandidate;
 use App\Services\Metadata\Matching\NormalizedTitle;
 use App\Services\Metadata\Matching\TitleNormalizer;
 use App\Services\Releases\ReleaseTitleParser;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -24,14 +25,18 @@ use Illuminate\Validation\ValidationException;
  *  2. a show whose normalized name (TitleNormalizer: case, punctuation, season
  *     wording) equals the suggested name or an alt title (+ season) (95);
  *  3. anime matching (AnimeMatcher) of the suggested name and alt titles against
- *     stored anime: every anime scoring >= 70 offers its linked shows (its score).
+ *     stored anime: every anime scoring >= 70 offers its linked shows (its score),
+ *     and an anime with no linked show is a candidate itself (a new show linked
+ *     to it).
  *
  * The target is the exact-name show; else the single candidate scoring >= 90
  * with no other candidate within 10 (§11's decision rule), whichever rule
- * produced it; else a new show with the suggested name.
+ * produced it (an anime candidate gives a new show linked to that anime); else
+ * a new show with the suggested name.
  *
  * Rejected show/anime pairs (show_anime_rejections) never offer that show
- * through that anime.
+ * through that anime: an anime whose only links are rejected counts as having
+ * no show.
  */
 final class SeriesTargets
 {
@@ -94,63 +99,97 @@ final class SeriesTargets
                 }
             }
         }
-        // 3. Anime matching.
-        $hits = [...$hits, ...$sameName, ...$this->animeMatches($normalizedQueries)];
+        // 3. Anime matching: linked shows, and anime without a show.
+        ['shows' => $animeShows, 'anime' => $animeHits] = $this->animeMatches($normalizedQueries);
+        $hits = [...$hits, ...$sameName, ...$animeShows];
 
-        // One candidate per show (its best hit), best first; ties keep the rule order.
+        // One candidate per show (its best hit), in rule order.
         $best = [];
         foreach ($hits as $hit) {
             if (! isset($best[$hit['showId']]) || $hit['score'] > $best[$hit['showId']]['score']) {
                 $best[$hit['showId']] = $hit;
             }
         }
-        $ranked = array_values($best);
-        usort($ranked, fn (array $a, array $b) => $b['score'] <=> $a['score']);
+
+        // One list, best first; ties: shows (in rule order) before anime (by id).
+        $ranked = [];
+        foreach (array_values($best) as $i => $hit) {
+            $ranked[] = [...$hit, 'order' => [0, $i]];
+        }
+        foreach ($animeHits as $hit) {
+            $ranked[] = [...$hit, 'order' => [1, $hit['animeId']]];
+        }
+        usort($ranked, fn (array $a, array $b) => [$b['score'], $a['order']] <=> [$a['score'], $b['order']]);
+        $ranked = array_map(function (array $hit) {
+            unset($hit['order']);
+
+            return $hit;
+        }, $ranked);
 
         // Without an exact name: a single candidate >= 90 with no runner-up within 10, whichever rule produced it.
         $top = $ranked[0] ?? null;
         $runnerUp = $ranked[1] ?? null;
 
+        $targetAnime = null;
+
         if ($target === null
             && $top !== null
             && $top['score'] >= AnimeMatcher::AUTO_LINK_MIN_SCORE
             && ($runnerUp === null || $top['score'] - $runnerUp['score'] >= AnimeMatcher::AUTO_LINK_MIN_MARGIN)) {
-            $target = $top['showId'];
+            if ($top['kind'] === 'show') {
+                $target = $top['showId'];
+            } else {
+                $targetAnime = $top['animeId'];
+            }
         }
 
         $candidates = array_slice($ranked, 0, self::MAX_CANDIDATES);
 
         return [
-            // describe() completes both kinds (names, trackability).
-            'target' => $target !== null ? ['kind' => 'existing', 'showId' => $target] : ['kind' => 'new', 'name' => $suggestedName],
+            // describe() completes both kinds (names, trackability, the anime).
+            'target' => $target !== null
+                ? ['kind' => 'existing', 'showId' => $target]
+                : ['kind' => 'new', 'name' => $suggestedName, 'animeId' => $targetAnime],
             'candidates' => $candidates,
         ];
     }
 
     /**
-     * Fills `showName` and `trackable` on every existing target and candidate of
-     * these series, in one query, and `trackable`/`trackBlockedReason` on new
-     * targets from the series' groups.
+     * Fills `showName` and `trackable` on every existing target and show
+     * candidate of these series, the anime on new targets and anime candidates
+     * (one query each), and `trackable`/`trackBlockedReason` on new targets and
+     * anime candidates from the series' groups.
      *
      * @param  array<int|string, array<string, mixed>>  $series
      * @return array<int|string, array<string, mixed>>
      */
     public function describe(array $series): array
     {
-        $ids = [];
+        $showIds = $animeIds = [];
         foreach ($series as $entry) {
             if ($entry['target']['kind'] === 'existing') {
-                $ids[] = $entry['target']['showId'];
+                $showIds[] = $entry['target']['showId'];
+            } elseif (($entry['target']['animeId'] ?? null) !== null) {
+                $animeIds[] = $entry['target']['animeId'];
             }
             foreach ($entry['candidates'] as $candidate) {
-                $ids[] = $candidate['showId'];
+                if ($candidate['kind'] === 'show') {
+                    $showIds[] = $candidate['showId'];
+                } else {
+                    $animeIds[] = $candidate['animeId'];
+                }
             }
         }
 
-        $shows = $ids === [] ? collect() : Show::query()
+        $shows = $showIds === [] ? collect() : Show::query()
             ->select(['id', 'name', 'is_tracked'])
             ->withTrackability()
-            ->whereKey(array_values(array_unique($ids)))
+            ->whereKey(array_values(array_unique($showIds)))
+            ->get()
+            ->keyBy('id');
+
+        $anime = $animeIds === [] ? collect() : self::animeQuery()
+            ->whereKey(array_values(array_unique($animeIds)))
             ->get()
             ->keyBy('id');
 
@@ -159,13 +198,30 @@ final class SeriesTargets
                 $show = $shows->get($entry['target']['showId']);
                 $series[$key]['target'] = $show === null ? self::newTarget($entry['suggestedName'], $entry['groups']) : self::existingTarget($show);
             } else {
-                $series[$key]['target'] = self::newTarget($entry['target']['name'], $entry['groups']);
+                $targetAnime = $anime->get($entry['target']['animeId'] ?? null);
+                $series[$key]['target'] = self::newTarget($entry['target']['name'], $entry['groups'], $targetAnime === null ? null : self::animeRef($targetAnime));
             }
 
-            $series[$key]['candidates'] = array_values(array_filter(array_map(function (array $candidate) use ($shows) {
+            // An anime candidate means a new show: trackable like a new target.
+            $animeTrackable = self::newTarget('', $entry['groups'])['trackable'];
+
+            $series[$key]['candidates'] = array_values(array_filter(array_map(function (array $candidate) use ($shows, $anime, $animeTrackable) {
+                if ($candidate['kind'] === 'anime') {
+                    $entry = $anime->get($candidate['animeId']);
+
+                    return $entry === null ? null : [
+                        'kind' => 'anime',
+                        'anime' => self::animeRef($entry),
+                        'why' => $candidate['why'],
+                        'score' => $candidate['score'],
+                        'trackable' => $animeTrackable,
+                    ];
+                }
+
                 $show = $shows->get($candidate['showId']);
 
                 return $show === null ? null : [
+                    'kind' => 'show',
                     'showId' => $show->id,
                     'showName' => $show->name,
                     'why' => $candidate['why'],
@@ -179,15 +235,18 @@ final class SeriesTargets
     }
 
     /**
-     * The target a retarget asks for: an existing show by id, or a new name
-     * (which becomes the existing show when one has exactly that name).
+     * The target a retarget asks for: an existing show by id; a new name (which
+     * becomes the existing show when one has exactly that name); or an anime:
+     * its one linked show, else a new show linked to it on confirm (named
+     * `newName`, else the series' suggested name). An unlinked show that already
+     * has that name becomes the target, remembering the anime to link.
      *
      * @param  array<int, string>  $groups  the series' groups, for a new target's trackability
      * @return array<string, mixed>
      *
      * @throws ValidationException
      */
-    public function chosen(?int $showId, ?string $newName, array $groups): array
+    public function chosen(?int $showId, ?string $newName, array $groups, ?int $animeId = null, string $suggestedName = ''): array
     {
         if ($showId !== null) {
             $show = Show::query()->select(['id', 'name', 'is_tracked'])->withTrackability()->find($showId);
@@ -199,15 +258,77 @@ final class SeriesTargets
             return self::existingTarget($show);
         }
 
-        $name = trim((string) $newName);
+        if ($animeId !== null) {
+            return $this->chosenAnime($animeId, $newName ?? $suggestedName, $groups);
+        }
+
+        $name = self::validName($newName);
+        $show = Show::query()->select(['id', 'name', 'is_tracked'])->withTrackability()->where('name', $name)->first();
+
+        return $show === null ? self::newTarget($name, $groups) : self::existingTarget($show);
+    }
+
+    /**
+     * @param  array<int, string>  $groups
+     * @return array<string, mixed>
+     *
+     * @throws ValidationException
+     */
+    private function chosenAnime(int $animeId, string $newName, array $groups): array
+    {
+        $anime = self::animeQuery()->find($animeId);
+
+        if ($anime === null) {
+            throw ValidationException::withMessages(['target.animeId' => "There is no anime with id {$animeId}."]);
+        }
+
+        $linked = self::linkedShowsOf([$anime->id])[$anime->id] ?? [];
+
+        if (count($linked) > 1) {
+            $names = implode(', ', array_column($linked, 'name'));
+
+            throw ValidationException::withMessages(['target.animeId' => self::animeTitle($anime)." already has shows {$names}: pick one of them."]);
+        }
+
+        if (count($linked) === 1) {
+            return self::existingTarget(Show::query()->select(['id', 'name', 'is_tracked'])->withTrackability()->findOrFail($linked[0]['id']));
+        }
+
+        $name = self::validName($newName);
+        $show = Show::query()->select(['id', 'name', 'is_tracked'])->withTrackability()->with('animeLink.anime')->where('name', $name)->first();
+
+        if ($show === null) {
+            return self::newTarget($name, $groups, self::animeRef($anime));
+        }
+
+        $link = $show->animeLink;
+
+        if ($link === null) {
+            // Linked to this anime when the import is confirmed.
+            return self::existingTarget($show, self::animeRef($anime));
+        }
+
+        if ($link->anime_id === $anime->id) {
+            return self::existingTarget($show);
+        }
+
+        $other = $link->anime === null ? "anime #{$link->anime_id}" : self::animeTitle($link->anime);
+
+        throw ValidationException::withMessages(['target.newName' => "A show named {$name} already exists and is linked to {$other}."]);
+    }
+
+    /**
+     * @throws ValidationException
+     */
+    private static function validName(?string $name): string
+    {
+        $name = trim((string) $name);
 
         if ($name === '' || mb_strlen($name) > 255) {
             throw ValidationException::withMessages(['target.newName' => 'A new show needs a name of 1 to 255 characters.']);
         }
 
-        $show = Show::query()->select(['id', 'name', 'is_tracked'])->withTrackability()->where('name', $name)->first();
-
-        return $show === null ? self::newTarget($name, $groups) : self::existingTarget($show);
+        return $name;
     }
 
     /**
@@ -247,9 +368,13 @@ final class SeriesTargets
     }
 
     /**
-     * @return array{kind: 'existing', showId: int, showName: string, trackable: bool, trackBlockedReason: string|null}
+     * An existing show. `anime` is the anime confirming links it to (an unlinked
+     * show picked through an anime, by its name), else null.
+     *
+     * @param  array<string, mixed>|null  $anime  an animeRef()
+     * @return array{kind: 'existing', showId: int, showName: string, trackable: bool, trackBlockedReason: string|null, anime: array<string, mixed>|null}
      */
-    public static function existingTarget(Show $show): array
+    public static function existingTarget(Show $show, ?array $anime = null): array
     {
         $trackability = $show->trackability();
 
@@ -259,18 +384,21 @@ final class SeriesTargets
             'showName' => $show->name,
             'trackable' => $trackability['trackable'],
             'trackBlockedReason' => $trackability['reason'],
+            'anime' => $anime,
         ];
     }
 
     /**
-     * A show to create with this name. It will be trackable only when the series
-     * has a SubsPlease item (the qBittorrent rule follows SubsPlease's feed), so
-     * the UI can warn before an untrackable show is created.
+     * A show to create with this name, linked to `anime` on confirm when one is
+     * given. It will be trackable only when the series has a SubsPlease item
+     * (the qBittorrent rule follows SubsPlease's feed), so the UI can warn
+     * before an untrackable show is created.
      *
      * @param  array<int, string>  $groups  the series' groups
-     * @return array{kind: 'new', name: string, trackable: bool, trackBlockedReason: string|null}
+     * @param  array<string, mixed>|null  $anime  an animeRef()
+     * @return array{kind: 'new', name: string, trackable: bool, trackBlockedReason: string|null, anime: array<string, mixed>|null}
      */
-    public static function newTarget(string $name, array $groups): array
+    public static function newTarget(string $name, array $groups, ?array $anime = null): array
     {
         $trackable = in_array(ReleaseTitleParser::SUBSPLEASE, $groups, true);
 
@@ -279,7 +407,78 @@ final class SeriesTargets
             'name' => $name,
             'trackable' => $trackable,
             'trackBlockedReason' => $trackable ? null : Show::blockedReason(),
+            'anime' => $anime,
         ];
+    }
+
+    /**
+     * The anime fields the import dialog shows (`NyaaAnimeRef`). Expects the
+     * cover's `image` loaded without `data` (animeQuery()).
+     *
+     * @return array{id: int, title: string, titleRomaji: string|null, titleEnglish: string|null, season: string|null, seasonYear: int|null, format: string|null, coverUrl: string|null}
+     */
+    public static function animeRef(Anime $anime): array
+    {
+        return [
+            'id' => $anime->id,
+            'title' => self::animeTitle($anime),
+            'titleRomaji' => $anime->title_romaji,
+            'titleEnglish' => $anime->title_english,
+            'season' => $anime->season,
+            'seasonYear' => $anime->season_year,
+            'format' => $anime->format,
+            'coverUrl' => $anime->image?->url(),
+        ];
+    }
+
+    public static function animeTitle(Anime $anime): string
+    {
+        return $anime->title_english ?? $anime->title_romaji ?? "#{$anime->id}";
+    }
+
+    /**
+     * Anime with what animeRef() and matching need: the cover's metadata, never its bytes.
+     *
+     * @return Builder<Anime>
+     */
+    public static function animeQuery(): Builder
+    {
+        return Anime::query()
+            ->select(['id', 'title_romaji', 'title_english', 'title_native', 'synonyms', 'season', 'season_year', 'format', 'cover_url', 'cover_error_at'])
+            ->with(['image' => fn ($q) => $q->select(['id', 'anime_id', 'sha256', 'width', 'height'])]);
+    }
+
+    /**
+     * The shows linked to these anime, leaving out links whose pair is rejected
+     * (as the candidates do), by show id.
+     *
+     * @param  array<int, int>  $animeIds
+     * @return array<int, array<int, array{id: int, name: string}>> anime id => shows
+     */
+    public static function linkedShowsOf(array $animeIds): array
+    {
+        if ($animeIds === []) {
+            return [];
+        }
+
+        $linked = [];
+
+        ShowAnimeLink::query()
+            ->whereIn('anime_id', $animeIds)
+            ->whereNotExists(fn ($q) => $q->selectRaw('1')
+                ->from('show_anime_rejections')
+                ->whereColumn('show_anime_rejections.show_id', 'show_anime_links.show_id')
+                ->whereColumn('show_anime_rejections.anime_id', 'show_anime_links.anime_id'))
+            ->with(['show' => fn ($q) => $q->select(['id', 'name'])])
+            ->orderBy('show_id')
+            ->get(['show_id', 'anime_id'])
+            ->each(function (ShowAnimeLink $link) use (&$linked) {
+                if ($link->show !== null) {
+                    $linked[$link->anime_id][] = ['id' => $link->show->id, 'name' => $link->show->name];
+                }
+            });
+
+        return $linked;
     }
 
     private function sameName(NormalizedTitle $show, NormalizedTitle $query): bool
@@ -292,8 +491,10 @@ final class SeriesTargets
     }
 
     /**
+     * Every scored anime's linked shows, and the scored anime without a show.
+     *
      * @param  array<int, array{query: string, alt: string|null, normalized: NormalizedTitle}>  $queries
-     * @return array<int, array{showId: int, why: string, score: int}> every scored anime's linked shows
+     * @return array{shows: array<int, array{kind: 'show', showId: int, why: string, score: int}>, anime: array<int, array{kind: 'anime', animeId: int, why: string, score: int}>}
      */
     private function animeMatches(array $queries): array
     {
@@ -317,14 +518,20 @@ final class SeriesTargets
 
         usort($scored, fn (array $a, array $b) => [$b['score'], $a['animeId']] <=> [$a['score'], $b['animeId']]);
 
-        $hits = [];
+        $shows = $anime = [];
         foreach ($scored as $match) {
-            foreach ($this->linkedShows()[$match['animeId']] ?? [] as $showId) {
-                $hits[] = $this->candidate($showId, "AniList title '{$match['title']}' of the linked anime.", $match['score']);
+            $linked = $this->linkedShows()[$match['animeId']] ?? [];
+
+            if ($linked === []) {
+                $anime[] = ['kind' => 'anime', 'animeId' => $match['animeId'], 'why' => "Anime title '{$match['title']}', no show yet.", 'score' => $match['score']];
+            }
+
+            foreach ($linked as $showId) {
+                $shows[] = $this->candidate($showId, "Anime title '{$match['title']}' of the linked anime.", $match['score']);
             }
         }
 
-        return $hits;
+        return ['shows' => $shows, 'anime' => $anime];
     }
 
     /**
@@ -353,11 +560,11 @@ final class SeriesTargets
     }
 
     /**
-     * @return array{showId: int, why: string, score: int}
+     * @return array{kind: 'show', showId: int, why: string, score: int}
      */
     private function candidate(int $showId, string $why, int $score): array
     {
-        return ['showId' => $showId, 'why' => $why, 'score' => $score];
+        return ['kind' => 'show', 'showId' => $showId, 'why' => $why, 'score' => $score];
     }
 
     /**
